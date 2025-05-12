@@ -8,8 +8,9 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 public class FindViewController {
 
-    @GetMapping("/home")
-    public String home(){
+    @GetMapping("/test")
+    public String test(){
+        log.info("Spring boot shardingJH is running!");
         return "Spring boot shardingJH is running!";
     }
 
