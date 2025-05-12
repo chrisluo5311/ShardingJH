@@ -1,4 +1,4 @@
 # ShardingJH
 
-A sharding database using Spring Boot and Hibernate to handle dynamic routing between multiple database.
+A distributed database project using Spring Boot and Hibernate to handle dynamic routing between multiple database.
 
