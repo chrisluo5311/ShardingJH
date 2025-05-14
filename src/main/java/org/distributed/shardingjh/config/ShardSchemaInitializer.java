@@ -1,6 +1,5 @@
 package org.distributed.shardingjh.config;
 
-import jakarta.annotation.PostConstruct;
 import org.springframework.boot.orm.jpa.EntityManagerFactoryBuilder;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.Bean;
