@@ -15,15 +15,33 @@ import javax.sql.DataSource;
 @Configuration
 public class DataSourceConfig {
 
-    @Bean(name = "shard1DataSource")
-    @ConfigurationProperties(prefix = "spring.datasource.shard1")
-    public DataSource shard1DataSource() {
+    @Bean(name = "shardCommon1DataSource")
+    @ConfigurationProperties(prefix = "spring.datasource.shardcommon1")
+    public DataSource shardCommon1DataSource() {
         return DataSourceBuilder.create().build();
     }
 
-    @Bean(name = "shard2DataSource")
-    @ConfigurationProperties(prefix = "spring.datasource.shard2")
-    public DataSource shard2DataSource() {
+    @Bean(name = "shardCommon2DataSource")
+    @ConfigurationProperties(prefix = "spring.datasource.shardcommon2")
+    public DataSource shardCommon2DataSource() {
+        return DataSourceBuilder.create().build();
+    }
+
+    @Bean(name = "shardOrder2024DataSource")
+    @ConfigurationProperties(prefix = "spring.datasource.shardorder2024")
+    public DataSource shardOrder2024DataSource() {
+        return DataSourceBuilder.create().build();
+    }
+
+    @Bean(name = "shardOrder2025DataSource")
+    @ConfigurationProperties(prefix = "spring.datasource.shardorder2025")
+    public DataSource shardOrder2025DataSource() {
+        return DataSourceBuilder.create().build();
+    }
+
+    @Bean(name = "shardOrderOldDataSource")
+    @ConfigurationProperties(prefix = "spring.datasource.shardorderold")
+    public DataSource shardOrderOldDataSource() {
         return DataSourceBuilder.create().build();
     }
 }
