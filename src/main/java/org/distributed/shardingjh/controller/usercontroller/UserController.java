@@ -2,8 +2,9 @@ package org.distributed.shardingjh.controller.usercontroller;
 
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
-import org.distributed.shardingjh.model.User;
-import org.distributed.shardingjh.service.UserService;
+import org.distributed.shardingjh.common.response.MgrResponseDto;
+import org.distributed.shardingjh.model.Member;
+import org.distributed.shardingjh.service.MemberService;
 import org.springframework.web.bind.annotation.*;
 
 @Slf4j
@@ -11,16 +12,17 @@ import org.springframework.web.bind.annotation.*;
 public class UserController {
 
     @Resource
-    UserService userService;
+    MemberService memberService;
 
     @RequestMapping(value = "/user/save", method = RequestMethod.POST)
-    public String save(@RequestBody User user) {
-        userService.saveUser(user);
-        return "Saved";
+    public MgrResponseDto<Member> save(@RequestBody Member member) {
+        Member newMember = memberService.saveUser(member);
+        return MgrResponseDto.success(newMember);
     }
 
     @RequestMapping(value = "/user/get/{id}", method = RequestMethod.GET)
-    public User get(@PathVariable Long id) {
-        return userService.findById(id);
+    public MgrResponseDto<Member> get(@PathVariable String id) {
+        Member member = memberService.findById(id);
+        return MgrResponseDto.success(member);
     }
 }
