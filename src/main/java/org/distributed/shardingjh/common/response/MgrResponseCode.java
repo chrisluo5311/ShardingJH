@@ -19,10 +19,13 @@ public enum MgrResponseCode {
     PARAM_NOT_FOUND("0101", "Parameter not found"),
     PARAM_INVALID("0102", "Invalid parameter"),
 
-    MEMBER_NOT_FOUND("0201", "User not found"),
-    MEMBER_ALREADY_EXISTS("0202", "User already exists"),
+    MEMBER_NOT_FOUND("0201", "Member not found"),
+    MEMBER_ALREADY_EXISTS("0202", "Member already exists"),
     MEMBER_PASSWORD_INVALID("0203", "Invalid username or password"),
-    MEMBER_DISABLED("0204", "User is disabled"),
+    MEMBER_DISABLED("0204", "Member is disabled"),
+
+    ORDER_NOT_FOUND("0301", "Order not found"),
+    ORDER_ALREADY_EXISTS("0302", "Order already exists"),
 
     DB_FAIL("0401", "Database operation failed"),
 
