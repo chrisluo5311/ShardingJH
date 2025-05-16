@@ -81,4 +81,22 @@ public class OrderServiceImpl implements OrderService {
             return result;
         }
     }
+
+    @Override
+    public OrderTable findByIdAndCreateTime(String orderId, String createTime) {
+        try {
+            // Get the shard key based on the order creation time
+            LocalDateTime startTime = LocalDate.parse(createTime).atStartOfDay();
+            String shardKey = rangeStrategy.resolveShard(startTime);
+            log.info("Order ID: {} routing to {}", orderId, shardKey);
+            // Set the shard key in the context
+            ShardContext.setCurrentShard(shardKey);
+            // Find the order by ID
+            OrderTable order = orderRepository.findById(orderId).orElse(null);
+            return order;
+        } finally {
+            // Clear the shard context after use
+            ShardContext.clear();
+        }
+    }
 }

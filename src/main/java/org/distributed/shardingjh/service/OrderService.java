@@ -10,4 +10,6 @@ public interface OrderService {
     OrderTable saveOrder(RequestOrder orderTable);
 
     List<OrderTable> findByCreateTimeBetween(String startDate, String endDate);
+
+    OrderTable findByIdAndCreateTime(String orderId, String createTime);
 }
