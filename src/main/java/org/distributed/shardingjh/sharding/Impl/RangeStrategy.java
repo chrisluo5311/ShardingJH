@@ -8,6 +8,7 @@ import org.distributed.shardingjh.sharding.ShardingStrategy;
 import org.springframework.stereotype.Component;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 
 @Slf4j
 @Component
@@ -18,17 +19,17 @@ public class RangeStrategy implements ShardingStrategy {
 
     @Override
     public String resolveShard(Object key) {
-        LocalDate date = (LocalDate) key;
+        LocalDateTime date = (LocalDateTime) key;
         if (date == null) {
             log.error("Order Date cannot be null");
             throw new IllegalArgumentException("Invalid Order: Date cannot be null");
         }
         String year = String.valueOf(date.getYear());
         log.info("Order Date: {}", date.toString());
-        if (date.isBefore(LocalDate.of(2025, 1, 1))) {
+        if (date.isBefore(LocalDate.of(2025, 1, 1).atStartOfDay())) {
             // e.g., key is "ORDER_2024"
             return shardingProperties.getLookup().get(ShardConst.SHARD_ORDER_PREFIX + year);
-        } else if (date.isBefore(LocalDate.of(2026, 1, 1))) {
+        } else if (date.isBefore(LocalDate.of(2026, 1, 1).atStartOfDay())) {
             // e.g., key is "ORDER_2025"
             return shardingProperties.getLookup().get(ShardConst.SHARD_ORDER_PREFIX + year);
         } else {
