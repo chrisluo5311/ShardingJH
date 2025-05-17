@@ -25,6 +25,7 @@ jobs:
 
       - name: Replace file path in application.properties
         run: |
+          cd ${{ secrets.TARGET_DIR }}
           sed -i 's|/path/to/|/home/ec2-user/|g' src/main/resources/application.properties
 
       - name: Executing remote ssh commands using ssh key
