@@ -34,6 +34,5 @@ jobs:
             sudo yum -y install sqlite-devel
             sudo yum -y install java-17-amazon-corretto
             cd ${{ secrets.TARGET_DIR }}
-            sed -i 's|/path/to/|/home/ec2-user/sqlitedb/|g' src/main/resources/application.properties
             chmod +x run-app.sh
             ./run-app.sh
