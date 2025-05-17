@@ -23,11 +23,6 @@ jobs:
           REMOTE_USER: ${{ secrets.USERNAME }}
           TARGET: ${{ secrets.TARGET_DIR }}
 
-      - name: Replace file path in application.properties
-        run: |
-          cd ${{ secrets.TARGET_DIR }}
-          sed -i 's|/path/to/|/home/ec2-user/|g' src/main/resources/application.properties
-
       - name: Executing remote ssh commands using ssh key
         uses: appleboy/ssh-action@master
         with:
@@ -39,5 +34,6 @@ jobs:
             sudo yum -y install sqlite-devel
             sudo yum -y install java-17-amazon-corretto
             cd ${{ secrets.TARGET_DIR }}
+            sed -i 's|/path/to/|/home/ec2-user/|g' src/main/resources/application.properties
             chmod +x run-app.sh
             ./run-app.sh
