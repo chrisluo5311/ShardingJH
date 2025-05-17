@@ -33,3 +33,6 @@ jobs:
             sudo yum -y update
             sudo yum -y install sqlite-devel
             sudo yum -y install java-17-amazon-corretto
+            cd ${{ secrets.TARGET_DIR }}
+            chmod +x run-app.sh
+            ./run-app.sh
