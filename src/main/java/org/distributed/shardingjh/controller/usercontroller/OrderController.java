@@ -26,7 +26,6 @@ public class OrderController {
         return MgrResponseDto.success(order);
     }
 
-
     @RequestMapping(value = "/order/find", method = RequestMethod.GET)
     public MgrResponseDto<List<OrderTable>> findOrderBetween(String startDate, String endDate) {
         List<OrderTable> result = orderServiceImpl.findByCreateTimeBetween(startDate, endDate);
@@ -36,13 +35,27 @@ public class OrderController {
         return MgrResponseDto.success(result);
     }
 
-
-    @RequestMapping(value = "/order/get/", method = RequestMethod.GET)
+    @RequestMapping(value = "/order/get", method = RequestMethod.GET)
     public MgrResponseDto<OrderTable> findOrderById(String orderId,String createTime) {
         OrderTable result = orderServiceImpl.findByIdAndCreateTime(orderId, createTime);
         if (result == null) {
             return MgrResponseDto.error(MgrResponseCode.ORDER_NOT_FOUND);
         }
         return MgrResponseDto.success(result);
+    }
+
+    @RequestMapping(value = "/order/update", method = RequestMethod.POST)
+    public MgrResponseDto<OrderTable> updateOrder(@RequestBody OrderTable order) {
+        OrderTable result = orderServiceImpl.updateOrder(order);
+        if (result == null) {
+            return MgrResponseDto.error(MgrResponseCode.ORDER_NOT_FOUND);
+        }
+        return MgrResponseDto.success(result);
+    }
+
+    @RequestMapping(value = "/order/delete", method = RequestMethod.DELETE)
+    public MgrResponseDto<String> deleteOrder(@RequestBody OrderTable order) {
+        orderServiceImpl.deleteOrder(order);
+        return MgrResponseDto.success("Order deleted successfully");
     }
 }

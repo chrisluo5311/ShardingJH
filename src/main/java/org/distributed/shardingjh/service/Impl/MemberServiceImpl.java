@@ -43,7 +43,7 @@ public class MemberServiceImpl implements MemberService {
         try {
             log.info("Find Member by id: {}", id);
             // Check Redis cache first
-            String key = RedisConst.REDIS_KEY_PREFIX + id;
+            String key = RedisConst.REDIS_KEY_MEMBER_PREFIX + id;
             log.info("Member Redis key: {}", key);
             Member cahcedMember = redisTemplate.opsForValue().get(key);
             if (cahcedMember != null) return cahcedMember;
@@ -72,7 +72,7 @@ public class MemberServiceImpl implements MemberService {
             String shardKey = hashStrategy.resolveShard(member.getId());
             log.info("Member {} routing to {}", member.getName(), shardKey);
             ShardContext.setCurrentShard(shardKey);
-            String key = RedisConst.REDIS_KEY_PREFIX + member.getId();
+            String key = RedisConst.REDIS_KEY_MEMBER_PREFIX + member.getId();
             redisTemplate.opsForValue().set(key, member);
             memberRepository.save(member);
             return member;
@@ -114,7 +114,7 @@ public class MemberServiceImpl implements MemberService {
             String shardKey = hashStrategy.resolveShard(member.getId());
             log.info("Member {} routing to {}", member.getId(), shardKey);
             ShardContext.setCurrentShard(shardKey);
-            String key = RedisConst.REDIS_KEY_PREFIX + member.getId();
+            String key = RedisConst.REDIS_KEY_MEMBER_PREFIX + member.getId();
             redisTemplate.opsForValue().set(key, member);
             memberRepository.save(member);
             return member;
@@ -133,7 +133,7 @@ public class MemberServiceImpl implements MemberService {
             log.info("Member {} routing to {}", id, shardKey);
             ShardContext.setCurrentShard(shardKey);
             // delete from redis
-            String key = RedisConst.REDIS_KEY_PREFIX + id;
+            String key = RedisConst.REDIS_KEY_MEMBER_PREFIX + id;
             redisTemplate.delete(key);
             // delete from database
             memberRepository.deleteById(id);

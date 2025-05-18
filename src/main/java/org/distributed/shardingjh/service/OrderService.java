@@ -12,4 +12,8 @@ public interface OrderService {
     List<OrderTable> findByCreateTimeBetween(String startDate, String endDate);
 
     OrderTable findByIdAndCreateTime(String orderId, String createTime);
+
+    OrderTable updateOrder(OrderTable order);
+
+    void deleteOrder(OrderTable order);
 }
