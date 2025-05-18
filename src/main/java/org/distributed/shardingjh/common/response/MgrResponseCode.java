@@ -21,7 +21,7 @@ public enum MgrResponseCode {
 
     MEMBER_NOT_FOUND("0201", "Member not found"),
     MEMBER_ALREADY_EXISTS("0202", "Member already exists"),
-    MEMBER_PASSWORD_INVALID("0203", "Invalid username or password"),
+    MEMBER_NAME_INVALID("0203", "Invalid Member Name"),
     MEMBER_DISABLED("0204", "Member is disabled"),
 
     ORDER_NOT_FOUND("0301", "Order not found"),

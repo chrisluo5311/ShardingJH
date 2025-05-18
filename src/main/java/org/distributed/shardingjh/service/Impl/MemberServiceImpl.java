@@ -106,4 +106,40 @@ public class MemberServiceImpl implements MemberService {
             ShardContext.clear();
         }
     }
+
+    @Override
+    public Member updateMember(Member member) {
+        try {
+            log.info("Update Member id: {}", member.getId());
+            String shardKey = hashStrategy.resolveShard(member.getId());
+            log.info("Member {} routing to {}", member.getId(), shardKey);
+            ShardContext.setCurrentShard(shardKey);
+            String key = RedisConst.REDIS_KEY_PREFIX + member.getId();
+            redisTemplate.opsForValue().set(key, member);
+            memberRepository.save(member);
+            return member;
+        } finally {
+            // Clear the shard context after use
+            ShardContext.clear();
+        }
+    }
+
+
+    @Override
+    public void deleteMember(String id) {
+        try {
+            // find shard of the user
+            String shardKey = hashStrategy.resolveShard(id);
+            log.info("Member {} routing to {}", id, shardKey);
+            ShardContext.setCurrentShard(shardKey);
+            // delete from redis
+            String key = RedisConst.REDIS_KEY_PREFIX + id;
+            redisTemplate.delete(key);
+            // delete from database
+            memberRepository.deleteById(id);
+        } finally {
+            // Clear the shard context after use
+            ShardContext.clear();
+        }
+    }
 }

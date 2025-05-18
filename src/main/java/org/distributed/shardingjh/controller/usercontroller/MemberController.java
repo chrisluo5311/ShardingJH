@@ -36,4 +36,19 @@ public class MemberController {
     public MgrResponseDto<List<Member>> getAllMembers() {
         return MgrResponseDto.success(memberServiceImpl.findAllMembers());
     }
+
+    @RequestMapping(value = "/user/update", method = RequestMethod.POST)
+    public MgrResponseDto<Member> updateMember(@RequestBody Member member) {
+        Member updatedMember = memberServiceImpl.updateMember(member);
+        if (updatedMember == null) {
+            return MgrResponseDto.error(MgrResponseCode.MEMBER_NAME_INVALID);
+        }
+        return MgrResponseDto.success(updatedMember);
+    }
+
+    @RequestMapping(value = "/user/delete/{id}", method = RequestMethod.DELETE)
+    public MgrResponseDto<String> deleteMember(@PathVariable String id) {
+        memberServiceImpl.deleteMember(id);
+        return MgrResponseDto.success("User deleted successfully");
+    }
 }
