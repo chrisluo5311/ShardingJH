@@ -108,11 +108,11 @@ public class InitSql implements CommandLineRunner {
                     stmt.executeUpdate("INSERT INTO member (id, name) VALUES ('"+memberId+"', '"+randomMemberName+"')");
                     LocalDateTime date1 = LocalDate.of(2025, 6, random.nextInt(30)+1).atStartOfDay();
                     String orderId1 = OrderIdGenerator.generateOrderId(date1, memberId);
-                    ord_stmt.executeUpdate("INSERT INTO order_table (order_id, create_time, is_paid, member_id) " +
+                    ord_stmt2.executeUpdate("INSERT INTO order_table (order_id, create_time, is_paid, member_id) " +
                             "VALUES ('"+orderId1+"' ,'"+date1.toInstant(ZoneOffset.UTC).toEpochMilli()+"', 1, '"+memberId+"')");
                     LocalDateTime date2 = LocalDate.of(2024, 6, random.nextInt(30)+1).atStartOfDay();
                     String orderId2 = OrderIdGenerator.generateOrderId(date2, memberId);
-                    ord_stmt2.executeUpdate("INSERT INTO order_table (order_id, create_time, is_paid, member_id) " +
+                    ord_stmt.executeUpdate("INSERT INTO order_table (order_id, create_time, is_paid, member_id) " +
                             "VALUES ('"+orderId2+"' ,'"+date2.toInstant(ZoneOffset.UTC).toEpochMilli()+"', 0, '"+memberId+"')");
                     LocalDateTime date3 = LocalDate.of(2023, 6, random.nextInt(30)+1).atStartOfDay();
                     String orderId3 = OrderIdGenerator.generateOrderId(date3, memberId);
@@ -123,11 +123,11 @@ public class InitSql implements CommandLineRunner {
                     stmt2.executeUpdate("INSERT INTO member (id, name) VALUES ('"+memberId+"', '"+randomMemberName+"')");
                     LocalDateTime date1 = LocalDate.of(2025, 6, random.nextInt(30)+1).atStartOfDay();
                     String orderId1 = OrderIdGenerator.generateOrderId(date1, memberId);
-                    ord_stmt.executeUpdate("INSERT INTO order_table (order_id, create_time, is_paid, member_id) " +
+                    ord_stmt2.executeUpdate("INSERT INTO order_table (order_id, create_time, is_paid, member_id) " +
                             "VALUES ('"+orderId1+"' ,'"+date1.toInstant(ZoneOffset.UTC).toEpochMilli()+"', 1, '"+memberId+"')");
                     LocalDateTime date2 = LocalDate.of(2024, 6, random.nextInt(30)+1).atStartOfDay();
                     String orderId2 = OrderIdGenerator.generateOrderId(date2, memberId);
-                    ord_stmt2.executeUpdate("INSERT INTO order_table (order_id, create_time, is_paid, member_id) " +
+                    ord_stmt.executeUpdate("INSERT INTO order_table (order_id, create_time, is_paid, member_id) " +
                             "VALUES ('"+orderId2+"' ,'"+date2.toInstant(ZoneOffset.UTC).toEpochMilli()+"', 0, '"+memberId+"')");
                     LocalDateTime date3 = LocalDate.of(2023, 6, random.nextInt(30)+1).atStartOfDay();
                     String orderId3 = OrderIdGenerator.generateOrderId(date3, memberId);
