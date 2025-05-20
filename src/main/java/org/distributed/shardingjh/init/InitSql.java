@@ -64,10 +64,14 @@ public class InitSql implements CommandLineRunner {
                 ");";
         // order
         String createOrderSql = "CREATE TABLE IF NOT EXISTS order_table (" +
-                "order_id varchar(255) PRIMARY KEY, " +
+                "order_id varchar(255), " +
+                "version INTEGER, " +
                 "create_time TIMESTAMP, " +
                 "is_paid INTEGER, " +
-                "member_id varchar(255)" +
+                "member_id varchar(255)," +
+                "expired_at TIMESTAMP, " +
+                "is_deleted INTEGER, " +
+                "PRIMARY KEY (order_id, version)" +
                 ");";
 
         try (Connection conn = shardCommon1.getConnection();
@@ -81,18 +85,23 @@ public class InitSql implements CommandLineRunner {
                 Connection ord_conn3 = shardOrderOld.getConnection();
                 Statement ord_stmt3 = ord_conn3.createStatement()) {
             // Create tables in shard_common_1
+            stmt.execute("DROP TABLE IF EXISTS member");
             stmt.execute(createUserSql);
             stmt.executeUpdate("DELETE FROM member");
             // Create tables in shard_common_2
+            stmt2.execute("DROP TABLE IF EXISTS member");
             stmt2.execute(createUserSql);
             stmt2.executeUpdate("DELETE FROM member");
             // Create tables in shard_order_2024
+            ord_stmt.execute("DROP TABLE IF EXISTS order_table");
             ord_stmt.execute(createOrderSql);
             ord_stmt.executeUpdate("DELETE FROM order_table");
             // Create tables in shard_order_2025
+            ord_stmt2.execute("DROP TABLE IF EXISTS order_table");
             ord_stmt2.execute(createOrderSql);
             ord_stmt2.executeUpdate("DELETE FROM order_table");
             // Create tables in shard_order_old
+            ord_stmt3.execute("DROP TABLE IF EXISTS order_table");
             ord_stmt3.execute(createOrderSql);
             ord_stmt3.executeUpdate("DELETE FROM order_table");
 
@@ -108,31 +117,31 @@ public class InitSql implements CommandLineRunner {
                     stmt.executeUpdate("INSERT INTO member (id, name) VALUES ('"+memberId+"', '"+randomMemberName+"')");
                     LocalDateTime date1 = LocalDate.of(2025, 6, random.nextInt(30)+1).atStartOfDay();
                     String orderId1 = OrderIdGenerator.generateOrderId(date1, memberId);
-                    ord_stmt2.executeUpdate("INSERT INTO order_table (order_id, create_time, is_paid, member_id) " +
-                            "VALUES ('"+orderId1+"' ,'"+date1.toInstant(ZoneOffset.UTC).toEpochMilli()+"', 1, '"+memberId+"')");
+                    ord_stmt2.executeUpdate("INSERT INTO order_table (order_id, create_time, is_paid, member_id, version, expired_at, is_deleted) " +
+                            "VALUES ('"+orderId1+"' ,'"+date1.toInstant(ZoneOffset.UTC).toEpochMilli()+"', 1, '"+memberId+"', 1, null, 0)");
                     LocalDateTime date2 = LocalDate.of(2024, 6, random.nextInt(30)+1).atStartOfDay();
                     String orderId2 = OrderIdGenerator.generateOrderId(date2, memberId);
-                    ord_stmt.executeUpdate("INSERT INTO order_table (order_id, create_time, is_paid, member_id) " +
-                            "VALUES ('"+orderId2+"' ,'"+date2.toInstant(ZoneOffset.UTC).toEpochMilli()+"', 0, '"+memberId+"')");
+                    ord_stmt.executeUpdate("INSERT INTO order_table (order_id, create_time, is_paid, member_id, version, expired_at, is_deleted) " +
+                            "VALUES ('"+orderId2+"' ,'"+date2.toInstant(ZoneOffset.UTC).toEpochMilli()+"', 0, '"+memberId+"', 1, null, 0)");
                     LocalDateTime date3 = LocalDate.of(2023, 6, random.nextInt(30)+1).atStartOfDay();
                     String orderId3 = OrderIdGenerator.generateOrderId(date3, memberId);
-                    ord_stmt3.executeUpdate("INSERT INTO order_table (order_id, create_time, is_paid, member_id) " +
-                            "VALUES ('"+orderId3+"' ,'"+date3.toInstant(ZoneOffset.UTC).toEpochMilli()+"', 1, '"+memberId+"')");
+                    ord_stmt3.executeUpdate("INSERT INTO order_table (order_id, create_time, is_paid, member_id, version, expired_at, is_deleted) " +
+                            "VALUES ('"+orderId3+"' ,'"+date3.toInstant(ZoneOffset.UTC).toEpochMilli()+"', 1, '"+memberId+"', 1, null, 0)");
                 } else if (shardIndex == 2 && cnt_2 > 0){
                     cnt_2 -= 1;
                     stmt2.executeUpdate("INSERT INTO member (id, name) VALUES ('"+memberId+"', '"+randomMemberName+"')");
                     LocalDateTime date1 = LocalDate.of(2025, 6, random.nextInt(30)+1).atStartOfDay();
                     String orderId1 = OrderIdGenerator.generateOrderId(date1, memberId);
-                    ord_stmt2.executeUpdate("INSERT INTO order_table (order_id, create_time, is_paid, member_id) " +
-                            "VALUES ('"+orderId1+"' ,'"+date1.toInstant(ZoneOffset.UTC).toEpochMilli()+"', 1, '"+memberId+"')");
+                    ord_stmt2.executeUpdate("INSERT INTO order_table (order_id, create_time, is_paid, member_id, version, expired_at, is_deleted) " +
+                            "VALUES ('"+orderId1+"' ,'"+date1.toInstant(ZoneOffset.UTC).toEpochMilli()+"', 1, '"+memberId+"', 1, null, 0)");
                     LocalDateTime date2 = LocalDate.of(2024, 6, random.nextInt(30)+1).atStartOfDay();
                     String orderId2 = OrderIdGenerator.generateOrderId(date2, memberId);
-                    ord_stmt.executeUpdate("INSERT INTO order_table (order_id, create_time, is_paid, member_id) " +
-                            "VALUES ('"+orderId2+"' ,'"+date2.toInstant(ZoneOffset.UTC).toEpochMilli()+"', 0, '"+memberId+"')");
+                    ord_stmt.executeUpdate("INSERT INTO order_table (order_id, create_time, is_paid, member_id, version, expired_at, is_deleted) " +
+                            "VALUES ('"+orderId2+"' ,'"+date2.toInstant(ZoneOffset.UTC).toEpochMilli()+"', 0, '"+memberId+"', 1, null, 0)");
                     LocalDateTime date3 = LocalDate.of(2023, 6, random.nextInt(30)+1).atStartOfDay();
                     String orderId3 = OrderIdGenerator.generateOrderId(date3, memberId);
-                    ord_stmt3.executeUpdate("INSERT INTO order_table (order_id, create_time, is_paid, member_id) " +
-                            "VALUES ('"+orderId3+"' ,'"+date3.toInstant(ZoneOffset.UTC).toEpochMilli()+"', 1, '"+memberId+"')");
+                    ord_stmt3.executeUpdate("INSERT INTO order_table (order_id, create_time, is_paid, member_id, version, expired_at, is_deleted) " +
+                            "VALUES ('"+orderId3+"' ,'"+date3.toInstant(ZoneOffset.UTC).toEpochMilli()+"', 1, '"+memberId+"', 1, null, 0)");
                 }
             }
         }

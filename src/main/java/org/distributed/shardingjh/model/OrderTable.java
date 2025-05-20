@@ -11,9 +11,13 @@ import java.time.LocalDateTime;
 @Table(name = "order_table")
 public class OrderTable {
 
-    @Id
-    @Column(name = "order_id")
-    private String orderId;
+    @EmbeddedId
+    @AttributeOverrides({
+            @AttributeOverride(name = "orderId", column = @Column(name = "order_id")),
+            @AttributeOverride(name = "version", column = @Column(name = "version"))
+    })
+
+    private OrderKey id;
 
     @Column(name = "create_time")
     private LocalDateTime createTime;
@@ -23,4 +27,11 @@ public class OrderTable {
 
     @Column(name = "member_id")
     private String memberId;
+
+    // MVCC
+    @Column(name = "expired_at")
+    private LocalDateTime expiredAt;
+
+    @Column(name = "is_deleted")
+    private Integer isDeleted = 0;
 }

@@ -9,11 +9,13 @@ public interface OrderService {
 
     OrderTable saveOrder(RequestOrder orderTable);
 
+    void deleteOrder(OrderTable order);
+
+    OrderTable updateOrder(OrderTable order);
+
     List<OrderTable> findByCreateTimeBetween(String startDate, String endDate);
 
     OrderTable findByIdAndCreateTime(String orderId, String createTime);
 
-    OrderTable updateOrder(OrderTable order);
-
-    void deleteOrder(OrderTable order);
+    List<OrderTable> findAllVersions(String orderId, String createTime);
 }
