@@ -32,11 +32,15 @@ public class OrderController {
 
     @RequestMapping(value = "/order/update", method = RequestMethod.POST)
     public MgrResponseDto<OrderTable> updateOrder(@RequestBody OrderTable order) {
-        OrderTable result = orderServiceImpl.updateOrder(order);
-        if (result == null) {
-            return MgrResponseDto.error(MgrResponseCode.ORDER_NOT_FOUND);
+        try {
+            OrderTable result = orderServiceImpl.updateOrder(order);
+            if (result == null) {
+                return MgrResponseDto.error(MgrResponseCode.ORDER_NOT_FOUND);
+            }
+            return MgrResponseDto.success(result);
+        } catch (IllegalStateException e) {
+            return MgrResponseDto.error(MgrResponseCode.DB_CONFLICT);
         }
-        return MgrResponseDto.success(result);
     }
 
     @RequestMapping(value = "/order/findRange", method = RequestMethod.GET)

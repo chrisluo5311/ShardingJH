@@ -16,7 +16,6 @@ public class OrderTable {
             @AttributeOverride(name = "orderId", column = @Column(name = "order_id")),
             @AttributeOverride(name = "version", column = @Column(name = "version"))
     })
-
     private OrderKey id;
 
     @Column(name = "create_time")

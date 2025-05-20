@@ -28,6 +28,7 @@ public enum MgrResponseCode {
     ORDER_ALREADY_EXISTS("0302", "Order already exists"),
 
     DB_FAIL("0401", "Database operation failed"),
+    DB_CONFLICT("0402", "Database conflict"),
 
     UNKNOWN_ERROR("9999", "System error");
 

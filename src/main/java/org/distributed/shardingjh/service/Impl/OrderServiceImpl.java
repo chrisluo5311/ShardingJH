@@ -49,12 +49,11 @@ public class OrderServiceImpl implements OrderService {
             orderTable.setMemberId(requestOrder.getMemberId());
             orderTable.setCreateTime(requestOrder.getCreateTime());
             orderTable.setIsPaid(requestOrder.getIsPaid());
+
             // Get the shard key based on the order creation time and set the shard key
             String shardKey = rangeStrategy.resolveShard(orderTable.getCreateTime());
             logRouting(orderId, shardKey);
-//            String redisKey = RedisConst.REDIS_KEY_ORDER_PREFIX + orderId;
-//            redisTemplate.opsForValue().set(redisKey, orderTable);
-            ShardContext.setCurrentShard(shardKey);
+
             // Expire previous version
             OrderTable current = orderRepository.findCurrentByOrderId(orderId).orElse(null);
             if (current != null) {
@@ -115,31 +114,40 @@ public class OrderServiceImpl implements OrderService {
      *
      * */
     @Override
-    public OrderTable updateOrder(OrderTable newOrder) {
+    public OrderTable updateOrder(OrderTable toUpdateOrder) {
         try {
-            log.info("Update Order: {}", newOrder.getId().getOrderId());
+            log.info("Update Order: {}", toUpdateOrder.getId().getOrderId());
+
             // Find shard and Set the shard key
-            String shardKey = rangeStrategy.resolveShard(newOrder.getCreateTime());
-            logRouting(newOrder.getId().getOrderId(), shardKey);
+            String shardKey = rangeStrategy.resolveShard(toUpdateOrder.getCreateTime());
+            logRouting(toUpdateOrder.getId().getOrderId(), shardKey);
             ShardContext.setCurrentShard(shardKey);
+
             // Expire previous version
-            OrderTable current = orderRepository.findCurrentByOrderId(newOrder.getId().getOrderId()).orElse(null);
-            if (current != null) {
-                log.info("Current Order version: {}", current.getId().getVersion());
-                current.setExpiredAt(LocalDateTime.now());
-                orderRepository.save(current);  // persist expired version
-                newOrder.setId(new OrderKey(newOrder.getId().getOrderId(), current.getId().getVersion()+1));
-            } else {
-                newOrder.getId().setVersion(1);
+            OrderTable current = orderRepository.findCurrentByOrderId(toUpdateOrder.getId().getOrderId()).orElse(null);
+            if (current == null) {
+                throw new IllegalStateException("No existing order found for update");
             }
 
-            // current version, not deleted
-            newOrder.setExpiredAt(null);
-            newOrder.setIsDeleted(0);
-            String redisKey = RedisConst.REDIS_KEY_ORDER_PREFIX + newOrder.getId().getOrderId();
-//            redisTemplate.opsForValue().set(redisKey, newOrder);
-            orderRepository.save(newOrder);
-            return newOrder;
+            // Enforce manual optimistic lock
+            Integer expectedVersion = toUpdateOrder.getId().getVersion();
+            log.info("Current Order in DB version: {}", current.getId().getVersion());
+            log.info("Expected Order from client version: {}", expectedVersion);
+            if (!expectedVersion.equals(current.getId().getVersion())) {
+                throw new IllegalStateException("Version mismatch: expected " + expectedVersion + ", actual " + current.getId().getVersion());
+            }
+
+            // Expire current version
+            current.setExpiredAt(LocalDateTime.now());
+            orderRepository.save(current);
+
+            // insert new version
+            int nextVersion = current.getId().getVersion() + 1;
+            toUpdateOrder.setId(new OrderKey(toUpdateOrder.getId().getOrderId(), nextVersion));
+            toUpdateOrder.setExpiredAt(null);
+            toUpdateOrder.setIsDeleted(0);
+            orderRepository.save(toUpdateOrder);
+            return toUpdateOrder;
         } finally {
             ShardContext.clear();
         }
