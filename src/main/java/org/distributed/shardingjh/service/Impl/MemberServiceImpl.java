@@ -23,10 +23,7 @@ public class MemberServiceImpl implements MemberService {
 
     @Resource
     private MemberRepository memberRepository;
-
-    @Resource
-    private RedisTemplate<String, Member> redisTemplate;
-
+    
     @Resource
     private HashStrategy hashStrategy;
 
@@ -42,18 +39,12 @@ public class MemberServiceImpl implements MemberService {
     public Member findById(String id) {
         try {
             log.info("Find Member by id: {}", id);
-            // Check Redis cache first
-            String key = RedisConst.REDIS_KEY_MEMBER_PREFIX + id;
-            log.info("Member Redis key: {}", key);
-            Member cahcedMember = redisTemplate.opsForValue().get(key);
-            if (cahcedMember != null) return cahcedMember;
 
             // search in the database
             String shardKey = hashStrategy.resolveShard(id);
             ShardContext.setCurrentShard(shardKey);
             log.info("Member {} routing to {}", id, shardKey);
             Optional<Member> user = memberRepository.findById(id);
-            user.ifPresent(u -> redisTemplate.opsForValue().set(key, u));
             return user.orElse(null);
         } finally {
             // Clear the shard context after use
@@ -72,8 +63,6 @@ public class MemberServiceImpl implements MemberService {
             String shardKey = hashStrategy.resolveShard(member.getId());
             log.info("Member {} routing to {}", member.getName(), shardKey);
             ShardContext.setCurrentShard(shardKey);
-            String key = RedisConst.REDIS_KEY_MEMBER_PREFIX + member.getId();
-            redisTemplate.opsForValue().set(key, member);
             memberRepository.save(member);
             return member;
         } finally {
@@ -114,8 +103,6 @@ public class MemberServiceImpl implements MemberService {
             String shardKey = hashStrategy.resolveShard(member.getId());
             log.info("Member {} routing to {}", member.getId(), shardKey);
             ShardContext.setCurrentShard(shardKey);
-            String key = RedisConst.REDIS_KEY_MEMBER_PREFIX + member.getId();
-            redisTemplate.opsForValue().set(key, member);
             memberRepository.save(member);
             return member;
         } finally {
@@ -132,9 +119,6 @@ public class MemberServiceImpl implements MemberService {
             String shardKey = hashStrategy.resolveShard(id);
             log.info("Member {} routing to {}", id, shardKey);
             ShardContext.setCurrentShard(shardKey);
-            // delete from redis
-            String key = RedisConst.REDIS_KEY_MEMBER_PREFIX + id;
-            redisTemplate.delete(key);
             // delete from database
             memberRepository.deleteById(id);
         } finally {
