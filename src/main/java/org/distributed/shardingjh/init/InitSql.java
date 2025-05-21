@@ -115,30 +115,30 @@ public class InitSql implements CommandLineRunner {
                 if (shardIndex == 1 && cnt_1 > 0) {
                     cnt_1 -= 1;
                     stmt.executeUpdate("INSERT INTO member (id, name) VALUES ('"+memberId+"', '"+randomMemberName+"')");
-                    LocalDateTime date1 = LocalDate.of(2025, 6, random.nextInt(30)+1).atStartOfDay();
+                    LocalDateTime date1 = LocalDate.of(2025, 3, random.nextInt(30)+1).atStartOfDay();
                     String orderId1 = OrderIdGenerator.generateOrderId(date1, memberId);
                     ord_stmt2.executeUpdate("INSERT INTO order_table (order_id, create_time, is_paid, member_id, version, expired_at, is_deleted) " +
                             "VALUES ('"+orderId1+"' ,'"+date1.toInstant(ZoneOffset.UTC).toEpochMilli()+"', 1, '"+memberId+"', 1, null, 0)");
-                    LocalDateTime date2 = LocalDate.of(2024, 6, random.nextInt(30)+1).atStartOfDay();
+                    LocalDateTime date2 = LocalDate.of(2024, 3, random.nextInt(30)+1).atStartOfDay();
                     String orderId2 = OrderIdGenerator.generateOrderId(date2, memberId);
                     ord_stmt.executeUpdate("INSERT INTO order_table (order_id, create_time, is_paid, member_id, version, expired_at, is_deleted) " +
                             "VALUES ('"+orderId2+"' ,'"+date2.toInstant(ZoneOffset.UTC).toEpochMilli()+"', 0, '"+memberId+"', 1, null, 0)");
-                    LocalDateTime date3 = LocalDate.of(2023, 6, random.nextInt(30)+1).atStartOfDay();
+                    LocalDateTime date3 = LocalDate.of(2023, 3, random.nextInt(30)+1).atStartOfDay();
                     String orderId3 = OrderIdGenerator.generateOrderId(date3, memberId);
                     ord_stmt3.executeUpdate("INSERT INTO order_table (order_id, create_time, is_paid, member_id, version, expired_at, is_deleted) " +
                             "VALUES ('"+orderId3+"' ,'"+date3.toInstant(ZoneOffset.UTC).toEpochMilli()+"', 1, '"+memberId+"', 1, null, 0)");
                 } else if (shardIndex == 2 && cnt_2 > 0){
                     cnt_2 -= 1;
                     stmt2.executeUpdate("INSERT INTO member (id, name) VALUES ('"+memberId+"', '"+randomMemberName+"')");
-                    LocalDateTime date1 = LocalDate.of(2025, 6, random.nextInt(30)+1).atStartOfDay();
+                    LocalDateTime date1 = LocalDate.of(2025, 3, random.nextInt(30)+1).atStartOfDay();
                     String orderId1 = OrderIdGenerator.generateOrderId(date1, memberId);
                     ord_stmt2.executeUpdate("INSERT INTO order_table (order_id, create_time, is_paid, member_id, version, expired_at, is_deleted) " +
                             "VALUES ('"+orderId1+"' ,'"+date1.toInstant(ZoneOffset.UTC).toEpochMilli()+"', 1, '"+memberId+"', 1, null, 0)");
-                    LocalDateTime date2 = LocalDate.of(2024, 6, random.nextInt(30)+1).atStartOfDay();
+                    LocalDateTime date2 = LocalDate.of(2024, 3, random.nextInt(30)+1).atStartOfDay();
                     String orderId2 = OrderIdGenerator.generateOrderId(date2, memberId);
                     ord_stmt.executeUpdate("INSERT INTO order_table (order_id, create_time, is_paid, member_id, version, expired_at, is_deleted) " +
                             "VALUES ('"+orderId2+"' ,'"+date2.toInstant(ZoneOffset.UTC).toEpochMilli()+"', 0, '"+memberId+"', 1, null, 0)");
-                    LocalDateTime date3 = LocalDate.of(2023, 6, random.nextInt(30)+1).atStartOfDay();
+                    LocalDateTime date3 = LocalDate.of(2023, 3, random.nextInt(30)+1).atStartOfDay();
                     String orderId3 = OrderIdGenerator.generateOrderId(date3, memberId);
                     ord_stmt3.executeUpdate("INSERT INTO order_table (order_id, create_time, is_paid, member_id, version, expired_at, is_deleted) " +
                             "VALUES ('"+orderId3+"' ,'"+date3.toInstant(ZoneOffset.UTC).toEpochMilli()+"', 1, '"+memberId+"', 1, null, 0)");
