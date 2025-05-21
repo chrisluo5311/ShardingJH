@@ -12,8 +12,8 @@ jobs:
       matrix:
         include:
           - server: 1
-            HOST_SECRET: HOST1_DNS
-            SSH_SECRET: EC2_SSH_KEY1
+            HOST_SECRET: HOST_DNS
+            SSH_SECRET: EC2_SSH_KEY
             PROFILE: server1
           - server: 2
             HOST_SECRET: HOST2_DNS
@@ -31,10 +31,10 @@ jobs:
       - name: Deploy to Server ${{ matrix.server }}
         uses: easingthemes/ssh-deploy@main
         env:
-          SSH_PRIVATE_KEY: ${{ secrets[matrix.SSH_SECRET] }}
-          REMOTE_HOST: ${{ secrets[matrix.HOST_SECRET] }}
-          REMOTE_USER: ${{ secrets.USERNAME }}
-          TARGET: ${{ secrets.TARGET_DIR }}
+          sshPrivateKey: ${{ secrets[matrix.SSH_SECRET] }}
+          remoteHost: ${{ secrets[matrix.HOST_SECRET] }}
+          remoteUser: ${{ secrets.USERNAME }}
+          target: ${{ secrets.TARGET_DIR }}
 
       - name: Executing remote SSH commands on Server ${{ matrix.server }}
         uses: appleboy/ssh-action@master
