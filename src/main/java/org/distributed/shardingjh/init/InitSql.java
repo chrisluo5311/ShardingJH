@@ -113,7 +113,7 @@ public class InitSql implements CommandLineRunner {
             int cnt_2 = 30;
             while (cnt_1 > 0 || cnt_2 > 0) {
                 String memberId = UUID.randomUUID().toString();
-                int serverIndex = Math.abs(memberId.hashCode()) % ShardConst.TOTAL_SERVER_COUNT + 1;
+                int serverIndex = Math.abs(memberId.hashCode()) % ShardConst.TOTAL_SERVER_COUNT;
                 if (serverId == serverIndex) {
                     int shardIndex = Math.abs(memberId.hashCode()) % ShardConst.TOTAL_SHARD_COMMON_COUNT + 1;
                     String randomMemberName = names[random.nextInt(names.length)];
