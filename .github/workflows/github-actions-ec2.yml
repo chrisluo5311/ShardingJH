@@ -10,20 +10,19 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        server: [1, 2, 3]
         include:
           - server: 1
-            HOST: ${{ secrets.HOST_DNS }}
+            HOST_SECRET: HOST1_DNS
+            SSH_SECRET: EC2_SSH_KEY1
             PROFILE: server1
-            SSH_KEY: ${{ secrets.EC2_SSH_KEY }}
           - server: 2
-            HOST: ${{ secrets.HOST2_DNS }}
+            HOST_SECRET: HOST2_DNS
+            SSH_SECRET: EC2_SSH_KEY2
             PROFILE: server2
-            SSH_KEY: ${{ secrets.EC2_SSH_KEY2 }}
           - server: 3
-            HOST: ${{ secrets.HOST3_DNS }}
+            HOST_SECRET: HOST3_DNS
+            SSH_SECRET: EC2_SSH_KEY3
             PROFILE: server3
-            SSH_KEY: ${{ secrets.EC2_SSH_KEY3 }}
 
     steps:
       - name: Checkout the files
@@ -32,17 +31,17 @@ jobs:
       - name: Deploy to Server ${{ matrix.server }}
         uses: easingthemes/ssh-deploy@main
         env:
-          SSH_PRIVATE_KEY: ${{ matrix.SSH_KEY }}
-          REMOTE_HOST: ${{ matrix.HOST }}
+          SSH_PRIVATE_KEY: ${{ secrets[matrix.SSH_SECRET] }}
+          REMOTE_HOST: ${{ secrets[matrix.HOST_SECRET] }}
           REMOTE_USER: ${{ secrets.USERNAME }}
           TARGET: ${{ secrets.TARGET_DIR }}
 
       - name: Executing remote SSH commands on Server ${{ matrix.server }}
         uses: appleboy/ssh-action@master
         with:
-          host: ${{ matrix.HOST }}
+          host: ${{ secrets[matrix.HOST_SECRET] }}
           username: ${{ secrets.USERNAME }}
-          key: ${{ matrix.SSH_KEY }}
+          key: ${{ secrets[matrix.SSH_SECRET] }}
           script: |
             sudo yum -y update
             sudo yum -y install sqlite-devel
