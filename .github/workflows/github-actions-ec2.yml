@@ -1,6 +1,5 @@
 name: Push-to-EC2
 
-# Trigger deployment only on push to main branch
 on:
   push:
     branches:
@@ -8,31 +7,46 @@ on:
 
 jobs:
   deploy:
-    name: Deploy to EC2 on master branch push
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        server: [1, 2, 3]
+        include:
+          - server: 1
+            HOST: ${{ secrets.HOST_DNS }}
+            PROFILE: server1
+            SSH_KEY: ${{ secrets.EC2_SSH_KEY }}
+          - server: 2
+            HOST: ${{ secrets.HOST2_DNS }}
+            PROFILE: server2
+            SSH_KEY: ${{ secrets.EC2_SSH_KEY2 }}
+          - server: 3
+            HOST: ${{ secrets.HOST3_DNS }}
+            PROFILE: server3
+            SSH_KEY: ${{ secrets.EC2_SSH_KEY3 }}
 
     steps:
       - name: Checkout the files
         uses: actions/checkout@v2
 
-      - name: Deploy to Server 1
+      - name: Deploy to Server ${{ matrix.server }}
         uses: easingthemes/ssh-deploy@main
         env:
-          SSH_PRIVATE_KEY: ${{ secrets.EC2_SSH_KEY }}
-          REMOTE_HOST: ${{ secrets.HOST_DNS }}
+          SSH_PRIVATE_KEY: ${{ matrix.SSH_KEY }}
+          REMOTE_HOST: ${{ matrix.HOST }}
           REMOTE_USER: ${{ secrets.USERNAME }}
           TARGET: ${{ secrets.TARGET_DIR }}
 
-      - name: Executing remote ssh commands using ssh key
+      - name: Executing remote SSH commands on Server ${{ matrix.server }}
         uses: appleboy/ssh-action@master
         with:
-          host: ${{ secrets.HOST_DNS }}
+          host: ${{ matrix.HOST }}
           username: ${{ secrets.USERNAME }}
-          key: ${{ secrets.EC2_SSH_KEY }}
+          key: ${{ matrix.SSH_KEY }}
           script: |
             sudo yum -y update
             sudo yum -y install sqlite-devel
             sudo yum -y install java-17-amazon-corretto
             cd ${{ secrets.TARGET_DIR }}
             chmod +x run-app.sh
-            ./run-app.sh
+            ./run-app.sh ${{ matrix.PROFILE }}
