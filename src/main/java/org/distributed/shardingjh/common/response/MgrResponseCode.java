@@ -16,6 +16,7 @@ public enum MgrResponseCode {
     REQUEST_ACCESS_DENIED("003", "Unauthorized access request, access denied"),
     TOO_MANY_REQUESTS("004", "Too Many Requests"),
     UNSUPPORTED_OPERATION("005", "Unsupported operation"),
+    SERVER_ERROR("006", "Server error"),
 
     PARAM_NOT_FOUND("0101", "Parameter not found"),
     PARAM_INVALID("0102", "Invalid parameter"),

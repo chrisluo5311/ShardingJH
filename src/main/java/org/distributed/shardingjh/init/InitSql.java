@@ -5,6 +5,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.distributed.shardingjh.common.constant.ShardConst;
 import org.distributed.shardingjh.service.Impl.OrderIdGenerator;
 import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.stereotype.Component;
 
@@ -33,17 +34,20 @@ public class InitSql implements CommandLineRunner {
     private final DataSource shardOrder2024;
     private final DataSource shardOrder2025;
     private final DataSource shardOrderOld;
+    private final int serverId;
 
     public InitSql(@Qualifier("shardCommon1DataSource") DataSource shardCommon1,
                     @Qualifier("shardCommon2DataSource") DataSource shardCommon2,
                     @Qualifier("shardOrder2024DataSource") DataSource shardOrder2024,
                     @Qualifier("shardOrder2025DataSource") DataSource shardOrder2025,
-                    @Qualifier("shardOrderOldDataSource") DataSource shardOrderOld) {
+                    @Qualifier("shardOrderOldDataSource") DataSource shardOrderOld,
+                    @Value("${router.server-id}") int serverId) {
         this.shardCommon1 = shardCommon1;
         this.shardCommon2 = shardCommon2;
         this.shardOrder2024 = shardOrder2024;
         this.shardOrder2025 = shardOrder2025;
         this.shardOrderOld = shardOrderOld;
+        this.serverId = serverId;
     }
 
     @Override
@@ -108,40 +112,44 @@ public class InitSql implements CommandLineRunner {
             int cnt_1 = 30;
             int cnt_2 = 30;
             while (cnt_1 > 0 || cnt_2 > 0) {
-                // check if the UUID is sharded to the shard_common_1
                 String memberId = UUID.randomUUID().toString();
-                int shardIndex = Math.abs(memberId.hashCode()) % ShardConst.TOTAL_SHARD_COMMON_COUNT + 1;
-                String randomMemberName = names[random.nextInt(names.length)];
-                if (shardIndex == 1 && cnt_1 > 0) {
-                    cnt_1 -= 1;
-                    stmt.executeUpdate("INSERT INTO member (id, name) VALUES ('"+memberId+"', '"+randomMemberName+"')");
-                    LocalDateTime date1 = LocalDate.of(2025, 3, random.nextInt(30)+1).atStartOfDay();
-                    String orderId1 = OrderIdGenerator.generateOrderId(date1, memberId);
-                    ord_stmt2.executeUpdate("INSERT INTO order_table (order_id, create_time, is_paid, member_id, version, expired_at, is_deleted) " +
-                            "VALUES ('"+orderId1+"' ,'"+date1.toInstant(ZoneOffset.UTC).toEpochMilli()+"', 1, '"+memberId+"', 1, null, 0)");
-                    LocalDateTime date2 = LocalDate.of(2024, 3, random.nextInt(30)+1).atStartOfDay();
-                    String orderId2 = OrderIdGenerator.generateOrderId(date2, memberId);
-                    ord_stmt.executeUpdate("INSERT INTO order_table (order_id, create_time, is_paid, member_id, version, expired_at, is_deleted) " +
-                            "VALUES ('"+orderId2+"' ,'"+date2.toInstant(ZoneOffset.UTC).toEpochMilli()+"', 0, '"+memberId+"', 1, null, 0)");
-                    LocalDateTime date3 = LocalDate.of(2023, 3, random.nextInt(30)+1).atStartOfDay();
-                    String orderId3 = OrderIdGenerator.generateOrderId(date3, memberId);
-                    ord_stmt3.executeUpdate("INSERT INTO order_table (order_id, create_time, is_paid, member_id, version, expired_at, is_deleted) " +
-                            "VALUES ('"+orderId3+"' ,'"+date3.toInstant(ZoneOffset.UTC).toEpochMilli()+"', 1, '"+memberId+"', 1, null, 0)");
-                } else if (shardIndex == 2 && cnt_2 > 0){
-                    cnt_2 -= 1;
-                    stmt2.executeUpdate("INSERT INTO member (id, name) VALUES ('"+memberId+"', '"+randomMemberName+"')");
-                    LocalDateTime date1 = LocalDate.of(2025, 3, random.nextInt(30)+1).atStartOfDay();
-                    String orderId1 = OrderIdGenerator.generateOrderId(date1, memberId);
-                    ord_stmt2.executeUpdate("INSERT INTO order_table (order_id, create_time, is_paid, member_id, version, expired_at, is_deleted) " +
-                            "VALUES ('"+orderId1+"' ,'"+date1.toInstant(ZoneOffset.UTC).toEpochMilli()+"', 1, '"+memberId+"', 1, null, 0)");
-                    LocalDateTime date2 = LocalDate.of(2024, 3, random.nextInt(30)+1).atStartOfDay();
-                    String orderId2 = OrderIdGenerator.generateOrderId(date2, memberId);
-                    ord_stmt.executeUpdate("INSERT INTO order_table (order_id, create_time, is_paid, member_id, version, expired_at, is_deleted) " +
-                            "VALUES ('"+orderId2+"' ,'"+date2.toInstant(ZoneOffset.UTC).toEpochMilli()+"', 0, '"+memberId+"', 1, null, 0)");
-                    LocalDateTime date3 = LocalDate.of(2023, 3, random.nextInt(30)+1).atStartOfDay();
-                    String orderId3 = OrderIdGenerator.generateOrderId(date3, memberId);
-                    ord_stmt3.executeUpdate("INSERT INTO order_table (order_id, create_time, is_paid, member_id, version, expired_at, is_deleted) " +
-                            "VALUES ('"+orderId3+"' ,'"+date3.toInstant(ZoneOffset.UTC).toEpochMilli()+"', 1, '"+memberId+"', 1, null, 0)");
+                int serverIndex = Math.abs(memberId.hashCode()) % ShardConst.TOTAL_SERVER_COUNT + 1;
+                if (serverId == serverIndex) {
+                    int shardIndex = Math.abs(memberId.hashCode()) % ShardConst.TOTAL_SHARD_COMMON_COUNT + 1;
+                    String randomMemberName = names[random.nextInt(names.length)];
+                    if (shardIndex == 1 && cnt_1 > 0) {
+                        // Insert member into shard_common_1
+                        cnt_1 -= 1;
+                        stmt.executeUpdate("INSERT INTO member (id, name) VALUES ('"+memberId+"', '"+randomMemberName+"')");
+                        LocalDateTime date1 = LocalDate.of(2025, 3, random.nextInt(30)+1).atTime(random.nextInt(24), random.nextInt(60), random.nextInt(60));
+                        String orderId1 = OrderIdGenerator.generateOrderId(date1, memberId);
+                        ord_stmt2.executeUpdate("INSERT INTO order_table (order_id, create_time, is_paid, member_id, version, expired_at, is_deleted) " +
+                                "VALUES ('"+orderId1+"' ,'"+date1.toInstant(ZoneOffset.UTC).toEpochMilli()+"', 1, '"+memberId+"', 1, null, 0)");
+                        LocalDateTime date2 = LocalDate.of(2024, 3, random.nextInt(30)+1).atTime(random.nextInt(24), random.nextInt(60), random.nextInt(60));
+                        String orderId2 = OrderIdGenerator.generateOrderId(date2, memberId);
+                        ord_stmt.executeUpdate("INSERT INTO order_table (order_id, create_time, is_paid, member_id, version, expired_at, is_deleted) " +
+                                "VALUES ('"+orderId2+"' ,'"+date2.toInstant(ZoneOffset.UTC).toEpochMilli()+"', 0, '"+memberId+"', 1, null, 0)");
+                        LocalDateTime date3 = LocalDate.of(2023, 3, random.nextInt(30)+1).atTime(random.nextInt(24), random.nextInt(60), random.nextInt(60));
+                        String orderId3 = OrderIdGenerator.generateOrderId(date3, memberId);
+                        ord_stmt3.executeUpdate("INSERT INTO order_table (order_id, create_time, is_paid, member_id, version, expired_at, is_deleted) " +
+                                "VALUES ('"+orderId3+"' ,'"+date3.toInstant(ZoneOffset.UTC).toEpochMilli()+"', 1, '"+memberId+"', 1, null, 0)");
+                    } else if (shardIndex == 2 && cnt_2 > 0){
+                        // Insert member into shard_common_2
+                        cnt_2 -= 1;
+                        stmt2.executeUpdate("INSERT INTO member (id, name) VALUES ('"+memberId+"', '"+randomMemberName+"')");
+                        LocalDateTime date1 = LocalDate.of(2025, 3, random.nextInt(30)+1).atTime(random.nextInt(24), random.nextInt(60), random.nextInt(60));
+                        String orderId1 = OrderIdGenerator.generateOrderId(date1, memberId);
+                        ord_stmt2.executeUpdate("INSERT INTO order_table (order_id, create_time, is_paid, member_id, version, expired_at, is_deleted) " +
+                                "VALUES ('"+orderId1+"' ,'"+date1.toInstant(ZoneOffset.UTC).toEpochMilli()+"', 1, '"+memberId+"', 1, null, 0)");
+                        LocalDateTime date2 = LocalDate.of(2024, 3, random.nextInt(30)+1).atTime(random.nextInt(24), random.nextInt(60), random.nextInt(60));
+                        String orderId2 = OrderIdGenerator.generateOrderId(date2, memberId);
+                        ord_stmt.executeUpdate("INSERT INTO order_table (order_id, create_time, is_paid, member_id, version, expired_at, is_deleted) " +
+                                "VALUES ('"+orderId2+"' ,'"+date2.toInstant(ZoneOffset.UTC).toEpochMilli()+"', 0, '"+memberId+"', 1, null, 0)");
+                        LocalDateTime date3 = LocalDate.of(2023, 3, random.nextInt(30)+1).atTime(random.nextInt(24), random.nextInt(60), random.nextInt(60));
+                        String orderId3 = OrderIdGenerator.generateOrderId(date3, memberId);
+                        ord_stmt3.executeUpdate("INSERT INTO order_table (order_id, create_time, is_paid, member_id, version, expired_at, is_deleted) " +
+                                "VALUES ('"+orderId3+"' ,'"+date3.toInstant(ZoneOffset.UTC).toEpochMilli()+"', 1, '"+memberId+"', 1, null, 0)");
+                    }
                 }
             }
         }
