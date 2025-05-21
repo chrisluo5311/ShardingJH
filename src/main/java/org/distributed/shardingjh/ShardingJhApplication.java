@@ -11,6 +11,9 @@ import org.springframework.context.annotation.PropertySource;
 public class ShardingJhApplication {
 
     public static void main(String[] args) {
+
+        // to enable the different server properties
+        // run "mvn spring-boot:run -Dspring-boot.run.arguments="--spring.profiles.active=server1""
         SpringApplication.run(ShardingJhApplication.class, args);
     }
 

@@ -2,7 +2,6 @@ package org.distributed.shardingjh.service.Impl;
 
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
-import org.distributed.shardingjh.common.constant.RedisConst;
 import org.distributed.shardingjh.common.constant.ShardConst;
 import org.distributed.shardingjh.config.ShardingProperties;
 import org.distributed.shardingjh.context.ShardContext;
@@ -10,7 +9,6 @@ import org.distributed.shardingjh.model.Member;
 import org.distributed.shardingjh.repository.user.MemberRepository;
 import org.distributed.shardingjh.service.MemberService;
 import org.distributed.shardingjh.sharding.Impl.HashStrategy;
-import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
@@ -23,7 +21,7 @@ public class MemberServiceImpl implements MemberService {
 
     @Resource
     private MemberRepository memberRepository;
-    
+
     @Resource
     private HashStrategy hashStrategy;
 
@@ -59,9 +57,8 @@ public class MemberServiceImpl implements MemberService {
     @Override
     public Member saveMember(Member member) {
         try {
-            log.info("Saving Member... : {}", member);
             String shardKey = hashStrategy.resolveShard(member.getId());
-            log.info("Member {} routing to {}", member.getName(), shardKey);
+            log.info("Routing member {} to shard {}", member.getId(), shardKey);
             ShardContext.setCurrentShard(shardKey);
             memberRepository.save(member);
             return member;
