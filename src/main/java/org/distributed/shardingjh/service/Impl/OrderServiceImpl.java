@@ -60,6 +60,7 @@ public class OrderServiceImpl implements OrderService {
                 current.setExpiredAt(LocalDateTime.now());
                 // persist expired version
                 orderRepository.save(current);
+                log.info("Older version of Order: {} expired successfully", orderId);
                 orderTable.setId(new OrderKey(orderId, current.getId().getVersion() + 1));
             } else {
                 orderTable.setId(new OrderKey(orderId, 1));
@@ -69,6 +70,7 @@ public class OrderServiceImpl implements OrderService {
             orderTable.setExpiredAt(null);
             orderTable.setIsDeleted(0);
             orderRepository.save(orderTable);
+            log.info("Order {} version:{} saved successfully", orderId, orderTable.getId().getVersion());
             return orderTable;
         } finally {
             // Clear the shard context after use
@@ -94,6 +96,7 @@ public class OrderServiceImpl implements OrderService {
             if (current != null) {
                 current.setExpiredAt(LocalDateTime.now());
                 orderRepository.save(current);
+                log.info("Older version of Order: {} expired successfully", orderTable.getId().getOrderId());
 
                 // Insert deleted record (for audit/history)
                 OrderTable deleted = new OrderTable();
@@ -102,6 +105,7 @@ public class OrderServiceImpl implements OrderService {
                 deleted.setExpiredAt(null);
                 deleted.setIsDeleted(1);
                 orderRepository.save(deleted);
+                log.info("Order {} deleted successfully", orderTable.getId().getOrderId());
             }
         } finally {
             ShardContext.clear();
@@ -140,6 +144,7 @@ public class OrderServiceImpl implements OrderService {
             // Expire current version
             current.setExpiredAt(LocalDateTime.now());
             orderRepository.save(current);
+            log.info("Older version of Order: {} expired successfully", toUpdateOrder.getId().getOrderId());
 
             // insert new version
             int nextVersion = current.getId().getVersion() + 1;
@@ -147,6 +152,7 @@ public class OrderServiceImpl implements OrderService {
             toUpdateOrder.setExpiredAt(null);
             toUpdateOrder.setIsDeleted(0);
             orderRepository.save(toUpdateOrder);
+            log.info("Order {} version:{} updated successfully", toUpdateOrder.getId().getOrderId(), nextVersion);
             return toUpdateOrder;
         } finally {
             ShardContext.clear();
