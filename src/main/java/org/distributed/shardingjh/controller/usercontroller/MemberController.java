@@ -37,7 +37,6 @@ public class MemberController {
             // forward the request to the correct server
             return serverRouter.forwardPost(member.getId(), "/user/save", member, MgrResponseDto.class);
         }
-        log.info("Server id Matched!");
         Member newMember = memberServiceImpl.saveMember(member);
         return MgrResponseDto.success(newMember);
     }
@@ -106,13 +105,13 @@ public class MemberController {
     }
 
     private boolean isLocal(String id) {
-        int toGoServerId = serverRouter.getServerIndex(id);
-        log.info("Routing to server id: {}", toGoServerId);
+        int toGoServerId = serverRouter.getMemberServerIndex(id);
+        log.info("[MemberController] Routing to server id: {}", toGoServerId);
         return toGoServerId == getCurrentServerIndex();
     }
 
     private int getCurrentServerIndex() {
-        log.info("Local server id: {}", SERVER_ID);
+        log.info("[MemberController] Local server id: {}", SERVER_ID);
         return SERVER_ID;
     }
 }
