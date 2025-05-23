@@ -1,5 +1,7 @@
 package org.distributed.shardingjh.gossip;
 
+import com.google.gson.Gson;
+
 public class GossipMsg {
     private String msgType;
     private String msgContent;
@@ -8,6 +10,7 @@ public class GossipMsg {
     private String timestamp;
     private String signature;
     
+    public enum Type {  HOSTDOWN, HOSTUP, HOSTREMOVE, HOSTADD, HOSTUPDATE }
     public String getMsgType() {
         return msgType;
     }
@@ -54,5 +57,13 @@ public class GossipMsg {
 
     public void setSignature(String signature) {
         this.signature = signature;
+    }
+    
+    public String toJson() {
+        return new Gson().toJson(this);
+    }
+
+    public static GossipMsg fromJson(String json) {
+        return new Gson().fromJson(json, GossipMsg.class);
     }
 }
