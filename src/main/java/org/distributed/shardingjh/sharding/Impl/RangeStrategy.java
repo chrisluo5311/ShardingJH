@@ -26,11 +26,13 @@ public class RangeStrategy implements ShardingStrategy {
         }
         String year = String.valueOf(date.getYear());
         log.info("Order Date: {}", date.toString());
-        if (date.isBefore(LocalDate.of(2025, 1, 1).atStartOfDay())) {
-            // e.g., key is "ORDER_2024"
-            return shardingProperties.getLookup().get(ShardConst.SHARD_ORDER_PREFIX + year);
-        } else if (date.isBefore(LocalDate.of(2026, 1, 1).atStartOfDay())) {
+        if (date.isEqual(LocalDate.of(2025, 1, 1).atStartOfDay())
+                || date.isAfter(LocalDate.of(2025, 1, 1).atStartOfDay())) {
             // e.g., key is "ORDER_2025"
+            return shardingProperties.getLookup().get(ShardConst.SHARD_ORDER_PREFIX + year);
+        } else if (date.isEqual(LocalDate.of(2024, 1, 1).atStartOfDay())
+                || date.isAfter(LocalDate.of(2024, 1, 1).atStartOfDay())) {
+            // e.g., key is "ORDER_2024"
             return shardingProperties.getLookup().get(ShardConst.SHARD_ORDER_PREFIX + year);
         } else {
             // Order before 2024 goes to ORDER_old (e.g., key is "ORDER_old")

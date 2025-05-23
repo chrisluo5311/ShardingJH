@@ -1,9 +1,10 @@
 package org.distributed.shardingjh.init;
 
-import lombok.AllArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.distributed.shardingjh.common.constant.ShardConst;
 import org.distributed.shardingjh.service.Impl.OrderIdGenerator;
 import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.stereotype.Component;
 
@@ -13,6 +14,7 @@ import java.sql.Statement;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
+import java.util.Random;
 import java.util.UUID;
 
 /**
@@ -31,123 +33,134 @@ public class InitSql implements CommandLineRunner {
     private final DataSource shardOrder2024;
     private final DataSource shardOrder2025;
     private final DataSource shardOrderOld;
+    private final int serverId;
 
     public InitSql(@Qualifier("shardCommon1DataSource") DataSource shardCommon1,
                     @Qualifier("shardCommon2DataSource") DataSource shardCommon2,
                     @Qualifier("shardOrder2024DataSource") DataSource shardOrder2024,
                     @Qualifier("shardOrder2025DataSource") DataSource shardOrder2025,
-                    @Qualifier("shardOrderOldDataSource") DataSource shardOrderOld) {
+                    @Qualifier("shardOrderOldDataSource") DataSource shardOrderOld,
+                    @Value("${router.server-id}") int serverId) {
         this.shardCommon1 = shardCommon1;
         this.shardCommon2 = shardCommon2;
         this.shardOrder2024 = shardOrder2024;
         this.shardOrder2025 = shardOrder2025;
         this.shardOrderOld = shardOrderOld;
+        this.serverId = serverId;
     }
 
     @Override
     public void run(String... args) throws Exception {
-        String memberID1 = UUID.randomUUID().toString();
-        String memberID2 = UUID.randomUUID().toString();
-        String memberID3 = UUID.randomUUID().toString();
-        String memberID4 = UUID.randomUUID().toString();
-        String memberID5 = UUID.randomUUID().toString();
-        String memberID6 = UUID.randomUUID().toString();
-        String memberID7 = UUID.randomUUID().toString();
-        String memberID8 = UUID.randomUUID().toString();
-        String memberID9 = UUID.randomUUID().toString();
-        String memberID10 = UUID.randomUUID().toString();
+        String[] names = {
+                "Emma Kingston", "Liam Archer", "Olivia Ford", "Mason Blake", "Ava Carter",
+                "Noah Grant", "Sophia Hayes", "Lucas Reed", "Mia Dawson", "Ethan Turner",
+                "Grace Bennett", "Logan Parker", "Chloe Brooks", "Jack Sullivan", "Zoe Mitchell",
+                "Henry Barrett", "Lily Foster", "Samuel Webster", "Nora Jennings", "Isaac Harper"
+        };
+        Random random = new Random();
 
-        // user
+        // member table
         String createUserSql = "CREATE TABLE IF NOT EXISTS member (" +
                 "id varchar(255) not null, " +
                 "name varchar(255), " +
                 "PRIMARY KEY (id)" +
                 ");";
-        // order
+        // order table
         String createOrderSql = "CREATE TABLE IF NOT EXISTS order_table (" +
-                "order_id varchar(255) PRIMARY KEY, " +
+                "order_id varchar(255), " +
+                "version INTEGER, " +
                 "create_time TIMESTAMP, " +
                 "is_paid INTEGER, " +
-                "member_id varchar(255)" +
+                "member_id varchar(255)," +
+                "expired_at TIMESTAMP, " +
+                "is_deleted INTEGER, " +
+                "PRIMARY KEY (order_id, version)" +
                 ");";
 
         try (Connection conn = shardCommon1.getConnection();
                 Statement stmt = conn.createStatement();
                 Connection conn2 = shardCommon2.getConnection();
-                Statement stmt2 = conn2.createStatement()) {
-            stmt.execute(createUserSql);
-            // Drop all the data in the table first
-            stmt.executeUpdate("DELETE FROM member");
-            stmt.executeUpdate("INSERT INTO member (id, name) VALUES ('"+memberID1+"', 'Alice')");
-            stmt.executeUpdate("INSERT INTO member (id, name) VALUES ('"+memberID2+"', 'Bob')");
-            stmt.executeUpdate("INSERT INTO member (id, name) VALUES ('"+memberID3+"', 'Charlie')");
-            stmt.executeUpdate("INSERT INTO member (id, name) VALUES ('"+memberID4+"', 'David')");
-            stmt.executeUpdate("INSERT INTO member (id, name) VALUES ('"+memberID5+"', 'Eve')");
+                Statement stmt2 = conn2.createStatement();
+                Connection ord_conn = shardOrder2024.getConnection();
+                Statement ord_stmt = ord_conn.createStatement();
+                Connection ord_conn2 = shardOrder2025.getConnection();
+                Statement ord_stmt2 = ord_conn2.createStatement();
+                Connection ord_conn3 = shardOrderOld.getConnection();
+                Statement ord_stmt3 = ord_conn3.createStatement()) {
 
+            // Create tables in shard_common_1
+            stmt.execute("DROP TABLE IF EXISTS member");
+            stmt.execute(createUserSql);
+            stmt.executeUpdate("DELETE FROM member");
+
+            // Create tables in shard_common_2
+            stmt2.execute("DROP TABLE IF EXISTS member");
             stmt2.execute(createUserSql);
             stmt2.executeUpdate("DELETE FROM member");
-            stmt2.executeUpdate("INSERT INTO member (id, name) VALUES ('"+memberID6+"', 'Tom')");
-            stmt2.executeUpdate("INSERT INTO member (id, name) VALUES ('"+memberID7+"', 'Jerry')");
-            stmt2.executeUpdate("INSERT INTO member (id, name) VALUES ('"+memberID8+"', 'Peter')");
-            stmt2.executeUpdate("INSERT INTO member (id, name) VALUES ('"+memberID9+"', 'Daniel')");
-            stmt2.executeUpdate("INSERT INTO member (id, name) VALUES ('"+memberID10+"', 'Cathy')");
-        }
 
-        try (Connection conn = shardOrder2024.getConnection();
-                Statement stmt = conn.createStatement();
-                Connection conn2 = shardOrder2025.getConnection();
-                Statement stmt2 = conn2.createStatement();
-                Connection conn3 = shardOrderOld.getConnection();
-                Statement stmt3 = conn3.createStatement()) {
-            stmt.execute(createOrderSql);
-            stmt.executeUpdate("DELETE FROM order_table");
-            LocalDateTime date1 = LocalDate.of(2024, 6, 1).atStartOfDay();
-            LocalDateTime date2 = LocalDate.of(2024, 6, 2).atStartOfDay();
-            LocalDateTime date3 = LocalDate.of(2024, 6, 3).atStartOfDay();
-            LocalDateTime date4 = LocalDate.of(2024, 6, 4).atStartOfDay();
-            String orderId1 = OrderIdGenerator.generateOrderId(date1, memberID1);
-            String orderId2 =OrderIdGenerator.generateOrderId(date2, memberID2);
-            String orderId3 =OrderIdGenerator.generateOrderId(date3, memberID6);
-            String orderId4 =OrderIdGenerator.generateOrderId(date4, memberID7);
-            stmt.executeUpdate("INSERT INTO order_table (order_id, create_time, is_paid, member_id) " +
-                    "VALUES ('"+orderId1+"' ,'"+date1.toInstant(ZoneOffset.UTC).toEpochMilli()+"', 1, '"+memberID1+"')");
-            stmt.executeUpdate("INSERT INTO order_table (order_id, create_time, is_paid, member_id) " +
-                    "VALUES ('"+orderId2+"', '"+date2.toInstant(ZoneOffset.UTC).toEpochMilli()+"', 0, '"+memberID2+"')");
-            stmt.executeUpdate("INSERT INTO order_table (order_id, create_time, is_paid, member_id) " +
-                    "VALUES ('"+orderId3+"','"+date3.toInstant(ZoneOffset.UTC).toEpochMilli()+"', 1, '"+memberID6+"')");
-            stmt.executeUpdate("INSERT INTO order_table (order_id, create_time, is_paid, member_id) " +
-                    "VALUES ('"+orderId4+"','"+date4.toInstant(ZoneOffset.UTC).toEpochMilli()+"', 1, '"+memberID7+"')");
+            // Create tables in shard_order_2024
+            ord_stmt.execute("DROP TABLE IF EXISTS order_table");
+            ord_stmt.execute(createOrderSql);
+            ord_stmt.executeUpdate("DELETE FROM order_table");
 
-            stmt2.execute(createOrderSql);
-            stmt2.executeUpdate("DELETE FROM order_table");
-            LocalDateTime date_2024_1 = LocalDate.of(2025, 6, 3).atStartOfDay();
-            LocalDateTime date_2024_2 = LocalDate.of(2025, 6, 4).atStartOfDay();
-            LocalDateTime date_2024_3 = LocalDate.of(2025, 6, 5).atStartOfDay();
-            LocalDateTime date_2024_4 = LocalDate.of(2025, 6, 6).atStartOfDay();
-            String orderId_2024_1 = OrderIdGenerator.generateOrderId(date_2024_1, memberID1);
-            String orderId_2024_2 =OrderIdGenerator.generateOrderId(date_2024_2, memberID2);
-            String orderId_2024_3 =OrderIdGenerator.generateOrderId(date_2024_3, memberID6);
-            String orderId_2024_4 =OrderIdGenerator.generateOrderId(date_2024_4, memberID7);
-            stmt2.executeUpdate("INSERT INTO order_table (order_id, create_time, is_paid, member_id) " +
-                    "VALUES ('"+orderId_2024_1+"','"+date_2024_1.toInstant(ZoneOffset.UTC).toEpochMilli()+"', 1, '"+memberID3+"')");
-            stmt2.executeUpdate("INSERT INTO order_table (order_id, create_time, is_paid, member_id) " +
-                    "VALUES ('"+orderId_2024_2+"','"+date_2024_2.toInstant(ZoneOffset.UTC).toEpochMilli()+"', 0, '"+memberID4+"')");
-            stmt2.executeUpdate("INSERT INTO order_table (order_id, create_time, is_paid, member_id) " +
-                    "VALUES ('"+orderId_2024_3+"','"+date_2024_3.toInstant(ZoneOffset.UTC).toEpochMilli()+"', 0, '"+memberID8+"')");
-            stmt2.executeUpdate("INSERT INTO order_table (order_id, create_time, is_paid, member_id) " +
-                    "VALUES ('"+orderId_2024_4+"','"+date_2024_4.toInstant(ZoneOffset.UTC).toEpochMilli()+"', 1, '"+memberID9+"')");
+            // Create tables in shard_order_2025
+            ord_stmt2.execute("DROP TABLE IF EXISTS order_table");
+            ord_stmt2.execute(createOrderSql);
+            ord_stmt2.executeUpdate("DELETE FROM order_table");
 
-            stmt3.execute(createOrderSql);
-            stmt3.executeUpdate("DELETE FROM order_table");
-            LocalDateTime date_2023_1 = LocalDate.of(2023, 6, 5).atStartOfDay();
-            LocalDateTime date_2023_2 = LocalDate.of(2023, 6, 6).atStartOfDay();
-            String orderId_2023_1 = OrderIdGenerator.generateOrderId(date_2023_1, memberID1);
-            String orderId_2023_2 =OrderIdGenerator.generateOrderId(date_2023_2, memberID2);
-            stmt3.executeUpdate("INSERT INTO order_table (order_id,create_time, is_paid, member_id) " +
-                    "VALUES ('"+orderId_2023_1+"','"+date_2023_1.toInstant(ZoneOffset.UTC).toEpochMilli()+"', 1, '"+memberID5+"')");
-            stmt3.executeUpdate("INSERT INTO order_table (order_id,create_time, is_paid, member_id) " +
-                    "VALUES ('"+orderId_2023_2+"','"+date_2023_2.toInstant(ZoneOffset.UTC).toEpochMilli()+"', 0, '"+memberID10+"')");
+            // Create tables in shard_order_old
+            ord_stmt3.execute("DROP TABLE IF EXISTS order_table");
+            ord_stmt3.execute(createOrderSql);
+            ord_stmt3.executeUpdate("DELETE FROM order_table");
 
+            int ordersPerMonth = 10;
+
+            int[][] allowedMonths = {
+                {1, 2, 3, 4},    // serverId 0: Jan - Apr
+                {5, 6, 7, 8},    // serverId 1: May - Aug
+                {9, 10, 11, 12}, // serverId 2: Sep - Dec
+            };
+            int[] monthsForServer = allowedMonths[serverId];
+
+            for (int month : monthsForServer) {
+                for (int i = 0; i < ordersPerMonth; ++i) {
+                    String memberId = UUID.randomUUID().toString();
+                    int serverIndex = Math.abs(memberId.hashCode()) % ShardConst.TOTAL_SERVER_COUNT;
+                    // Ensure the generated member id belongs to the current server
+                    while (serverIndex != serverId) {
+                        memberId = UUID.randomUUID().toString();
+                        serverIndex = Math.abs(memberId.hashCode()) % ShardConst.TOTAL_SERVER_COUNT;
+                    }
+
+                    int shardIndex = Math.abs(memberId.hashCode()) % ShardConst.TOTAL_SHARD_COMMON_COUNT + 1;
+                    String randomMemberName = names[random.nextInt(names.length)];
+
+                    // For each data source
+                    LocalDateTime date2025 = LocalDate.of(2025, month, random.nextInt(28) + 1)
+                        .atTime(random.nextInt(24), random.nextInt(60), random.nextInt(60));
+                    LocalDateTime date2024 = LocalDate.of(2024, month, random.nextInt(28) + 1)
+                        .atTime(random.nextInt(24), random.nextInt(60), random.nextInt(60));
+                    LocalDateTime date2023 = LocalDate.of(2023, month, random.nextInt(28) + 1)
+                        .atTime(random.nextInt(24), random.nextInt(60), random.nextInt(60));
+
+                    String orderId2025 = OrderIdGenerator.generateOrderId(date2025, memberId);
+                    String orderId2024 = OrderIdGenerator.generateOrderId(date2024, memberId);
+                    String orderId2023 = OrderIdGenerator.generateOrderId(date2023, memberId);
+
+                    if (shardIndex == 1) {
+                        stmt.executeUpdate("INSERT INTO member (id, name) VALUES ('" + memberId + "', '" + randomMemberName + "')");
+                    } else {
+                        stmt2.executeUpdate("INSERT INTO member (id, name) VALUES ('" + memberId + "', '" + randomMemberName + "')");
+                    }
+                    // Insert orders - you can distribute among the tables as required
+                    ord_stmt2.executeUpdate("INSERT INTO order_table (order_id, create_time, is_paid, member_id, version, expired_at, is_deleted) " +
+                        "VALUES ('" + orderId2025 + "' ,'" + date2025.toInstant(ZoneOffset.UTC).toEpochMilli() + "', 1, '" + memberId + "', 1, null, 0)");
+                    ord_stmt.executeUpdate("INSERT INTO order_table (order_id, create_time, is_paid, member_id, version, expired_at, is_deleted) " +
+                        "VALUES ('" + orderId2024 + "' ,'" + date2024.toInstant(ZoneOffset.UTC).toEpochMilli() + "', 0, '" + memberId + "', 1, null, 0)");
+                    ord_stmt3.executeUpdate("INSERT INTO order_table (order_id, create_time, is_paid, member_id, version, expired_at, is_deleted) " +
+                        "VALUES ('" + orderId2023 + "' ,'" + date2023.toInstant(ZoneOffset.UTC).toEpochMilli() + "', 1, '" + memberId + "', 1, null, 0)");
+                }
+            }
         }
 
         log.info("Database tables initialized successfully.");

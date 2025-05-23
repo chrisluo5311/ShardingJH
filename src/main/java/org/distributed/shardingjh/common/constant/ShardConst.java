@@ -14,5 +14,7 @@ public class ShardConst {
     // Shard for orders
     public static final String SHARD_ORDER_PREFIX = "ORDER_";
     // Shard for old orders
-    public static final String SHARD_ORDER_OLD = "old";
+    public static final String SHARD_ORDER_OLD = "OLD";
+    // Total server count
+    public static final Integer TOTAL_SERVER_COUNT = 3;
 }

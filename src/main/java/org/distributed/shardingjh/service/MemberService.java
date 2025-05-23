@@ -18,6 +18,19 @@ public interface MemberService {
      * */
     Member saveMember(Member member);
 
-
+    /**
+     * Find all users
+     * */
     List<Member> findAllMembers();
+
+
+    /**
+     * Update user information
+     * */
+    Member updateMember(Member member);
+
+    /**
+     * Delete user by id
+     * */
+    void deleteMember(String id);
 }

@@ -90,14 +90,14 @@ class ShardingJhApplicationTests {
     void findAllByCreatedTime() {
         LocalDateTime startDate = LocalDate.of(2024,6,1).atStartOfDay();
         ShardContext.setCurrentShard("shard_order_2024");
-        List<OrderTable> result = orderRepository.findAllByCreateTimeAfter(startDate);
+        List<OrderTable> result = orderRepository.findValidOrdersAfter(startDate);
         log.info("After startDate: {}, result: {}", startDate,result);
         ShardContext.clear();
 
         LocalDateTime startDate2 = LocalDate.of(2025,1,1).atStartOfDay();
         LocalDateTime endDate = LocalDate.of(2025,8,1).atStartOfDay();
         ShardContext.setCurrentShard("shard_order_2025");
-        List<OrderTable> orders = orderRepository.findByCreateTimeBetween(startDate2, endDate);
+        List<OrderTable> orders = orderRepository.findValidOrdersBetween(startDate2, endDate);
         log.info("Before endDate: {}, result: {}", endDate, orders);
         ShardContext.clear();
     }

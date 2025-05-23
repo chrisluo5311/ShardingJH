@@ -8,14 +8,27 @@ import org.springframework.stereotype.Repository;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Optional;
 
 @Repository
 public interface OrderRepository extends JpaRepository<OrderTable, String>  {
 
-    List<OrderTable> findByCreateTimeBetween(LocalDateTime createTimeAfter, LocalDateTime createTimeBefore);
+    @Query("SELECT o FROM OrderTable o WHERE o.id.orderId = :orderId AND o.expiredAt IS NULL AND o.isDeleted = 0")
+    Optional<OrderTable> findCurrentByOrderId(@Param("orderId") String orderId);
 
-    List<OrderTable> findAllByCreateTimeAfter(LocalDateTime createTimeAfter);
+    @Query("SELECT o FROM OrderTable o WHERE o.createTime BETWEEN :start AND :end AND o.expiredAt IS NULL AND o.isDeleted = 0")
+    List<OrderTable> findValidOrdersBetween(@Param("start") LocalDateTime start, @Param("end") LocalDateTime end);
 
-    List<OrderTable> findAllByCreateTimeBefore(LocalDateTime createTimeBefore);
+    @Query("SELECT o FROM OrderTable o " +
+            "WHERE o.createTime >= :createTimeAfter " +
+            "AND o.expiredAt IS NULL AND o.isDeleted = 0")
+    List<OrderTable> findValidOrdersAfter(@Param("createTimeAfter") LocalDateTime createTimeAfter);
 
+    @Query("SELECT o FROM OrderTable o " +
+            "WHERE o.createTime <= :createTimeBefore " +
+            "AND o.expiredAt IS NULL AND o.isDeleted = 0")
+    List<OrderTable> findValidOrdersBefore(@Param("createTimeBefore") LocalDateTime createTimeBefore);
+
+    @Query("SELECT o FROM OrderTable o WHERE o.id.orderId = :orderId ORDER BY o.id.version ASC")
+    List<OrderTable> findAllVersionsByOrderId(@Param("orderId") String orderId);
 }
