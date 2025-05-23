@@ -36,6 +36,9 @@ public class StaticFileController {
     @Value("${static.path}")
     private String staticFilePath;
 
+    @Value("${router.server-url}")
+    private String CURRENT_NODE_URL;
+
     private final RestTemplate restTemplate = new RestTemplate();
 
     @RequestMapping(value = "/static/lookup-meta", method = RequestMethod.GET)
@@ -44,7 +47,7 @@ public class StaticFileController {
             return MgrResponseDto.success(fileName);
         }
 
-        String nextNode = fingerTable.findNextNode(fileName);
+        String nextNode = fingerTable.findNextNode(fileName,CURRENT_NODE_URL);
         String url = nextNode + "/static/lookup?fileName=" + URLEncoder.encode(fileName, StandardCharsets.UTF_8);
         log.info("🔁 Forwarding request for {} to {}", fileName, nextNode);
         return restTemplate.getForObject(url, MgrResponseDto.class);
@@ -52,7 +55,7 @@ public class StaticFileController {
 
     @RequestMapping(value = "/static/lookup", method = RequestMethod.GET)
     public ResponseEntity<byte[]> serveFile(@RequestParam String fileName) throws IOException {
-        log.info("🔍 Looking up file: {}", fileName);
+        log.info("Looking up file: {}", fileName);
         if (fileStore.contains(fileName)) {
             Path filePath = Path.of(staticFilePath, fileName);
             byte[] fileBytes = Files.readAllBytes(filePath);
@@ -65,9 +68,9 @@ public class StaticFileController {
         }
 
         // Forward to next node if not found
-        String nextNode = fingerTable.findNextNode(fileName);
+        String nextNode = fingerTable.findNextNode(fileName, CURRENT_NODE_URL);
         String url = nextNode + "/static/lookup?fileName=" + URLEncoder.encode(fileName, StandardCharsets.UTF_8);
-        log.info("🔁 Forwarding request for {} to {}", fileName, nextNode);
+        log.info("🔁 Forwarding request for {} to {}", fileName, url);
         ResponseEntity<byte[]> response = restTemplate.exchange(
                 url,
                 HttpMethod.GET,
