@@ -5,6 +5,14 @@ import jakarta.annotation.Resource;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
+/**
+ * Finger table initializer
+ * {
+ *  64:  "http://3.147.58.62:8081",
+ *  128: "http://3.15.149.110:8082",
+ *  192: "http://52.15.151.104:8083"
+ *  }
+ * */
 @Component
 public class FingerTableInitializer {
 

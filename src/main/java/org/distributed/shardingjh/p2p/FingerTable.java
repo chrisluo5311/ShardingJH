@@ -1,6 +1,7 @@
 package org.distributed.shardingjh.p2p;
 
 import lombok.extern.slf4j.Slf4j;
+import org.distributed.shardingjh.common.constant.ShardConst;
 import org.springframework.stereotype.Component;
 
 import java.util.NavigableMap;
@@ -9,14 +10,21 @@ import java.util.TreeMap;
 @Slf4j
 @Component
 public class FingerTable {
-    private final TreeMap<Integer, String> finger = new TreeMap<>();
+    public final TreeMap<Integer, String> finger = new TreeMap<>();
 
     public void addEntry(int hash, String address) {
         finger.put(hash, address);
     }
 
+    /**
+     * Find the next node in the finger table for a given file
+     * Skip the current node if it is in the finger table
+     * Wrap around to the head of the table if no larger node is found
+     * @param fileName the name of the file
+     * @param currentNodeUrl the URL of the current node
+     * */
     public String findNextNode(String fileName, String currentNodeUrl) {
-        int target = Math.abs(fileName.hashCode()) % 256;
+        int target = Math.abs(fileName.hashCode()) % ShardConst.FINGER_MAX_RANGE;
         log.info("Finding next node for file: {} (hash: {})", fileName, target);
         log.info("finger table: {}", finger);
 

@@ -17,4 +17,6 @@ public class ShardConst {
     public static final String SHARD_ORDER_OLD = "OLD";
     // Total server count
     public static final Integer TOTAL_SERVER_COUNT = 3;
+
+    public static final Integer FINGER_MAX_RANGE = 256;
 }
