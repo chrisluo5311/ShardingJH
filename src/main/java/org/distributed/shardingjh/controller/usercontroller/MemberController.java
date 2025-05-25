@@ -6,6 +6,7 @@ import org.distributed.shardingjh.common.response.MgrResponseCode;
 import org.distributed.shardingjh.common.response.MgrResponseDto;
 import org.distributed.shardingjh.config.ServerRouter;
 import org.distributed.shardingjh.model.Member;
+import org.distributed.shardingjh.p2p.FingerTable;
 import org.distributed.shardingjh.service.Impl.MemberServiceImpl;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.ParameterizedTypeReference;
@@ -28,14 +29,17 @@ public class MemberController {
     @Resource
     ServerRouter serverRouter;
 
-    @Value("${router.server-id}")
-    private int SERVER_ID;
+    @Value("${router.server-url}")
+    private String CURRENT_NODE_URL;
+
+    @Resource
+    FingerTable fingerTable;
 
     @RequestMapping(value = "/user/save", method = RequestMethod.POST)
     public MgrResponseDto<Member> saveMember(@RequestBody Member member) {
-        if (!isLocal(member.getId())) {
-            // forward the request to the correct server
-            return serverRouter.forwardPost(member.getId(), "/user/save", member, MgrResponseDto.class);
+        String responsibleUrl = serverRouter.getMemberResponsibleServerUrl(member.getId());
+        if (!CURRENT_NODE_URL.equals(responsibleUrl)) {
+            return serverRouter.forwardPost(responsibleUrl, "/user/save", member, MgrResponseDto.class);
         }
         Member newMember = memberServiceImpl.saveMember(member);
         return MgrResponseDto.success(newMember);
@@ -43,9 +47,10 @@ public class MemberController {
 
     @RequestMapping(value = "/user/get/{id}", method = RequestMethod.GET)
     public MgrResponseDto<Member> getOneMember(@PathVariable String id) {
-        if (!isLocal(id)) {
+        String responsibleUrl = serverRouter.getMemberResponsibleServerUrl(id);
+        if (!CURRENT_NODE_URL.equals(responsibleUrl)) {
             // forward the request to the correct server
-            return serverRouter.forwardGet(id, "/user/get/" + id, MgrResponseDto.class);
+            return serverRouter.forwardGet(responsibleUrl, "/user/get/" + id, MgrResponseDto.class);
         }
         Member member = memberServiceImpl.findById(id);
         if (member == null) {
@@ -56,20 +61,14 @@ public class MemberController {
 
     @RequestMapping(value = "/user/getAll", method = RequestMethod.GET)
     public MgrResponseDto<List<Member>> getAllMembers() {
-        // If not the coordinator server, route to the coordinator server
-        if (SERVER_ID != 0) {
-            log.info("Forwarding /user/getAll request to coordinator (server 0)");
-            return serverRouter.forwardGetRaw(
-                    0,
-                    "/user/getAll",
-                    new ParameterizedTypeReference<MgrResponseDto<List<Member>>>() {}
-            );
-        }
         List<Member> all = new ArrayList<>(memberServiceImpl.findAllMembers());
-        for (int i = 1; i < 3; i++) {
-            List<Member> remote = serverRouter.forwardGetRaw(
-                    i, "/user/getAllLocal", new ParameterizedTypeReference<List<Member>>() {});
-            all.addAll(remote);
+
+        for (String node : fingerTable.finger.values()) {
+            if (!node.equals(CURRENT_NODE_URL)) {
+                List<Member> remote = serverRouter.forwardGetRaw(
+                        node, "/user/getAllLocal", new ParameterizedTypeReference<List<Member>>() {});
+                all.addAll(remote);
+            }
         }
         log.info("Size of all members: {}", all.size());
         return MgrResponseDto.success(all);
@@ -82,9 +81,10 @@ public class MemberController {
 
     @RequestMapping(value = "/user/update", method = RequestMethod.POST)
     public MgrResponseDto<Member> updateMember(@RequestBody Member member) {
-        if (!isLocal(member.getId())) {
+        String responsibleUrl = serverRouter.getMemberResponsibleServerUrl(member.getId());
+        if (!CURRENT_NODE_URL.equals(responsibleUrl)) {
             // forward the request to the correct server
-            return serverRouter.forwardPost(member.getId(), "/user/update", member, MgrResponseDto.class);
+            return serverRouter.forwardPost(responsibleUrl, "/user/update", member, MgrResponseDto.class);
         }
         Member updatedMember = memberServiceImpl.updateMember(member);
         if (updatedMember == null) {
@@ -95,23 +95,13 @@ public class MemberController {
 
     @RequestMapping(value = "/user/delete/{id}", method = RequestMethod.DELETE)
     public MgrResponseDto<String> deleteMember(@PathVariable String id) {
-        if (!isLocal(id)) {
+        String responsibleUrl = serverRouter.getMemberResponsibleServerUrl(id);
+        if (!CURRENT_NODE_URL.equals(responsibleUrl)) {
             // forward the request to the correct server
-            serverRouter.forwardDelete(id, "/user/delete/" + id);
+            serverRouter.forwardDelete(responsibleUrl, "/user/delete/" + id);
             return MgrResponseDto.success("User deleted successfully");
         }
         memberServiceImpl.deleteMember(id);
         return MgrResponseDto.success("User deleted successfully");
-    }
-
-    private boolean isLocal(String id) {
-        int toGoServerId = serverRouter.getMemberServerIndex(id);
-        log.info("[MemberController] Routing to server id: {}", toGoServerId);
-        return toGoServerId == getCurrentServerIndex();
-    }
-
-    private int getCurrentServerIndex() {
-        log.info("[MemberController] Local server id: {}", SERVER_ID);
-        return SERVER_ID;
     }
 }
