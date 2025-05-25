@@ -41,6 +41,7 @@ public class StaticFileController {
 
     private final RestTemplate restTemplate = new RestTemplate();
 
+    // Note: This method is not used in the current implementation
     @RequestMapping(value = "/static/lookup-meta", method = RequestMethod.GET)
     public MgrResponseDto<String> findFile(@RequestParam String fileName) {
         if (fileStore.contains(fileName)) {
@@ -55,7 +56,7 @@ public class StaticFileController {
 
     @RequestMapping(value = "/static/lookup", method = RequestMethod.GET)
     public ResponseEntity<byte[]> serveFile(@RequestParam String fileName) throws IOException {
-        log.info("Looking up file: {}", fileName);
+        log.info("Looking up static file: {}", fileName);
         if (fileStore.contains(fileName)) {
             Path filePath = Path.of(staticFilePath, fileName);
             byte[] fileBytes = Files.readAllBytes(filePath);

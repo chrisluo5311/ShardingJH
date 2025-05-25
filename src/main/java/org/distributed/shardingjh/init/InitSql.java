@@ -14,7 +14,9 @@ import java.sql.Statement;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
+import java.util.Map;
 import java.util.Random;
+import java.util.TreeMap;
 import java.util.UUID;
 
 /**
@@ -39,20 +41,20 @@ public class InitSql implements CommandLineRunner {
     private final DataSource shardOrder2024;
     private final DataSource shardOrder2025;
     private final DataSource shardOrderOld;
-    private final int serverId;
+    private final String CURRENT_NODE_URL;
 
     public InitSql(@Qualifier("shardCommon1DataSource") DataSource shardCommon1,
                     @Qualifier("shardCommon2DataSource") DataSource shardCommon2,
                     @Qualifier("shardOrder2024DataSource") DataSource shardOrder2024,
                     @Qualifier("shardOrder2025DataSource") DataSource shardOrder2025,
                     @Qualifier("shardOrderOldDataSource") DataSource shardOrderOld,
-                    @Value("${router.server-id}") int serverId) {
+                    @Value("${router.server-url}") String CURRENT_NODE_URL) {
         this.shardCommon1 = shardCommon1;
         this.shardCommon2 = shardCommon2;
         this.shardOrder2024 = shardOrder2024;
         this.shardOrder2025 = shardOrder2025;
         this.shardOrderOld = shardOrderOld;
-        this.serverId = serverId;
+        this.CURRENT_NODE_URL = CURRENT_NODE_URL;
     }
 
     @Override
@@ -61,7 +63,11 @@ public class InitSql implements CommandLineRunner {
                 "Emma Kingston", "Liam Archer", "Olivia Ford", "Mason Blake", "Ava Carter",
                 "Noah Grant", "Sophia Hayes", "Lucas Reed", "Mia Dawson", "Ethan Turner",
                 "Grace Bennett", "Logan Parker", "Chloe Brooks", "Jack Sullivan", "Zoe Mitchell",
-                "Henry Barrett", "Lily Foster", "Samuel Webster", "Nora Jennings", "Isaac Harper"
+                "Henry Barrett", "Lily Foster", "Samuel Webster", "Nora Jennings", "Isaac Harper",
+                "Charlotte Murphy", "Alexander Cooper", "Amelia Rivera", "James Morgan", "Ella Bell",
+                "Benjamin Ward", "Sofia Price", "Daniel Wood", "Avery Ross", "Matthew Hughes",
+                "Scarlett Powell", "David Rivera", "Aria Long", "Joseph Reed", "Madison Diaz",
+                "Michael Cox", "Layla Sanders", "William Perry", "Samantha Ramirez", "Jackson Butler",
         };
         Random random = new Random();
 
@@ -78,6 +84,7 @@ public class InitSql implements CommandLineRunner {
                 "create_time TIMESTAMP, " +
                 "is_paid INTEGER, " +
                 "member_id varchar(255)," +
+                "price INTEGER, " +
                 "expired_at TIMESTAMP, " +
                 "is_deleted INTEGER, " +
                 "PRIMARY KEY (order_id, version)" +
@@ -120,56 +127,93 @@ public class InitSql implements CommandLineRunner {
             ord_stmt3.execute(createOrderSql);
             ord_stmt3.executeUpdate("DELETE FROM order_table");
 
-            int ordersPerMonth = 10;
+            int memberInserted1 = 0;
+            int memberInserted2 = 0;
+            int order2025Inserted = 0;
+            int order2024Inserted = 0;
+            int order2023Inserted = 0;
+            int maxDataSize = 30;
 
-            int[][] allowedMonths = {
-                {1, 2, 3, 4},    // serverId 0: Jan - Apr
-                {5, 6, 7, 8},    // serverId 1: May - Aug
-                {9, 10, 11, 12}, // serverId 2: Sep - Dec
-            };
-            int[] monthsForServer = allowedMonths[serverId];
+            TreeMap<Integer, String> serverUrls = new TreeMap<>(Map.of(
+                64, "http://3.147.58.62:8081",
+                128, "http://3.15.149.110:8082",
+                192, "http://52.15.151.104:8083"
+            ));
 
-            for (int month : monthsForServer) {
-                for (int i = 0; i < ordersPerMonth; ++i) {
-                    String memberId = UUID.randomUUID().toString();
-                    int serverIndex = Math.abs(memberId.hashCode()) % ShardConst.TOTAL_SERVER_COUNT;
-                    // Ensure the generated member id belongs to the current server
-                    while (serverIndex != serverId) {
-                        memberId = UUID.randomUUID().toString();
-                        serverIndex = Math.abs(memberId.hashCode()) % ShardConst.TOTAL_SERVER_COUNT;
-                    }
+//            TreeMap<Integer, String> serverUrls = new TreeMap<>(Map.of(
+//                    64, "http://localhost:8081",
+//                    128, "http://localhost:8082",
+//                    192, "http://localhost:8083"
+//            ));
 
-                    int shardIndex = Math.abs(memberId.hashCode()) % ShardConst.TOTAL_SHARD_COMMON_COUNT + 1;
-                    String randomMemberName = names[random.nextInt(names.length)];
+            while (memberInserted1 < maxDataSize || memberInserted2 < maxDataSize || order2025Inserted < maxDataSize ||
+                    order2024Inserted < maxDataSize || order2023Inserted < maxDataSize) {
+                String memberId = UUID.randomUUID().toString();
+                int shardIndex = Math.abs(memberId.hashCode()) % ShardConst.TOTAL_SHARD_COMMON_COUNT + 1;
+                String randomMemberName = names[random.nextInt(names.length)];
 
-                    // For each data source
-                    LocalDateTime date2025 = LocalDate.of(2025, month, random.nextInt(28) + 1)
-                        .atTime(random.nextInt(24), random.nextInt(60), random.nextInt(60));
-                    LocalDateTime date2024 = LocalDate.of(2024, month, random.nextInt(28) + 1)
-                        .atTime(random.nextInt(24), random.nextInt(60), random.nextInt(60));
-                    LocalDateTime date2023 = LocalDate.of(2023, month, random.nextInt(28) + 1)
-                        .atTime(random.nextInt(24), random.nextInt(60), random.nextInt(60));
+                // Order dates
+                LocalDateTime date2025 = LocalDate.of(2025, random.nextInt(12)+1, random.nextInt(28) + 1)
+                    .atTime(random.nextInt(24), random.nextInt(60), random.nextInt(60));
+                LocalDateTime date2024 = LocalDate.of(2024, random.nextInt(12)+1, random.nextInt(28) + 1)
+                    .atTime(random.nextInt(24), random.nextInt(60), random.nextInt(60));
+                LocalDateTime date2023 = LocalDate.of(2023, random.nextInt(12)+1, random.nextInt(28) + 1)
+                    .atTime(random.nextInt(24), random.nextInt(60), random.nextInt(60));
 
-                    String orderId2025 = OrderIdGenerator.generateOrderId(date2025, memberId);
-                    String orderId2024 = OrderIdGenerator.generateOrderId(date2024, memberId);
-                    String orderId2023 = OrderIdGenerator.generateOrderId(date2023, memberId);
+                String orderId2025 = OrderIdGenerator.generateOrderId(date2025, memberId);
+                String orderId2024 = OrderIdGenerator.generateOrderId(date2024, memberId);
+                String orderId2023 = OrderIdGenerator.generateOrderId(date2023, memberId);
 
+                // MEMBER shard 1 INSERTION
+                if (memberInserted1 < maxDataSize && isResponsible(memberId, serverUrls, CURRENT_NODE_URL)) {
                     if (shardIndex == 1) {
                         stmt.executeUpdate("INSERT INTO member (id, name) VALUES ('" + memberId + "', '" + randomMemberName + "')");
-                    } else {
-                        stmt2.executeUpdate("INSERT INTO member (id, name) VALUES ('" + memberId + "', '" + randomMemberName + "')");
+                        memberInserted1++;
                     }
-                    // Insert orders - you can distribute among the tables as required
-                    ord_stmt2.executeUpdate("INSERT INTO order_table (order_id, create_time, is_paid, member_id, version, expired_at, is_deleted) " +
-                        "VALUES ('" + orderId2025 + "' ,'" + date2025.toInstant(ZoneOffset.UTC).toEpochMilli() + "', 1, '" + memberId + "', 1, null, 0)");
-                    ord_stmt.executeUpdate("INSERT INTO order_table (order_id, create_time, is_paid, member_id, version, expired_at, is_deleted) " +
-                        "VALUES ('" + orderId2024 + "' ,'" + date2024.toInstant(ZoneOffset.UTC).toEpochMilli() + "', 0, '" + memberId + "', 1, null, 0)");
-                    ord_stmt3.executeUpdate("INSERT INTO order_table (order_id, create_time, is_paid, member_id, version, expired_at, is_deleted) " +
-                        "VALUES ('" + orderId2023 + "' ,'" + date2023.toInstant(ZoneOffset.UTC).toEpochMilli() + "', 1, '" + memberId + "', 1, null, 0)");
+                }
+                // MEMBER shard 2 INSERTION
+                if (memberInserted2 < maxDataSize && isResponsible(memberId, serverUrls, CURRENT_NODE_URL)) {
+                    if (shardIndex == 2) {
+                        stmt2.executeUpdate("INSERT INTO member (id, name) VALUES ('" + memberId + "', '" + randomMemberName + "')");
+                        memberInserted2++;
+                    }
+                }
+
+                // ORDER 2025
+                if (order2025Inserted < maxDataSize && isResponsible(orderId2025, serverUrls, CURRENT_NODE_URL)) {
+                    int randomPrice = random.nextInt(1000) + 1;
+                    ord_stmt2.executeUpdate("INSERT INTO order_table (order_id, create_time, is_paid, member_id, price, version, expired_at, is_deleted) " +
+                            "VALUES ('" + orderId2025 + "' ,'" + date2025.toInstant(ZoneOffset.UTC).toEpochMilli() + "', 1, '" +
+                            memberId + "', "+randomPrice+" , 1, null, 0)");
+                    order2025Inserted++;
+                }
+
+                // ORDER 2024
+                if (order2024Inserted < maxDataSize && isResponsible(orderId2024, serverUrls, CURRENT_NODE_URL)) {
+                    int randomPrice = random.nextInt(1000) + 1;
+                    ord_stmt.executeUpdate("INSERT INTO order_table (order_id, create_time, is_paid, member_id, price, version, expired_at, is_deleted) " +
+                            "VALUES ('" + orderId2024 + "' ,'" + date2024.toInstant(ZoneOffset.UTC).toEpochMilli() + "', 0, '" +
+                            memberId + "', "+randomPrice+", 1, null, 0)");
+                    order2024Inserted++;
+                }
+
+                // ORDER 2023
+                if (order2023Inserted < maxDataSize && isResponsible(orderId2023, serverUrls, CURRENT_NODE_URL)) {
+                    int randomPrice = random.nextInt(1000) + 1;
+                    ord_stmt3.executeUpdate("INSERT INTO order_table (order_id, create_time, is_paid, member_id, price, version, expired_at, is_deleted) " +
+                            "VALUES ('" + orderId2023 + "' ,'" + date2023.toInstant(ZoneOffset.UTC).toEpochMilli() + "', 1, '" +
+                            memberId + "', "+randomPrice+", 1, null, 0)");
+                    order2023Inserted++;
                 }
             }
         }
-
         log.info("Database tables initialized successfully.");
+    }
+
+    private boolean isResponsible(String key, TreeMap<Integer, String> serverUrls, String currentNodeUrl) {
+        int target = Math.abs(key.hashCode()) % ShardConst.FINGER_MAX_RANGE;
+        Map.Entry<Integer, String> entry = serverUrls.ceilingEntry(target);
+        String responsibleUrl = entry != null ? entry.getValue() : serverUrls.firstEntry().getValue();
+        return responsibleUrl.equals(currentNodeUrl);
     }
 }
