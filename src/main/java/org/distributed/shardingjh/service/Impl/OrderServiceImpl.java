@@ -2,8 +2,6 @@ package org.distributed.shardingjh.service.Impl;
 
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
-import org.aspectj.weaver.ast.Or;
-import org.distributed.shardingjh.common.constant.RedisConst;
 import org.distributed.shardingjh.context.ShardContext;
 import org.distributed.shardingjh.model.OrderKey;
 import org.distributed.shardingjh.model.OrderTable;
@@ -49,10 +47,12 @@ public class OrderServiceImpl implements OrderService {
             orderTable.setMemberId(requestOrder.getMemberId());
             orderTable.setCreateTime(requestOrder.getCreateTime());
             orderTable.setIsPaid(requestOrder.getIsPaid());
+            orderTable.setPrice(requestOrder.getPrice());
 
             // Get the shard key based on the order creation time and set the shard key
             String shardKey = rangeStrategy.resolveShard(orderTable.getCreateTime());
             logRouting(orderId, shardKey);
+            ShardContext.setCurrentShard(shardKey);
 
             // Expire previous version
             OrderTable current = orderRepository.findCurrentByOrderId(orderId).orElse(null);

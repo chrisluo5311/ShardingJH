@@ -27,6 +27,9 @@ public class OrderTable {
     @Column(name = "member_id")
     private String memberId;
 
+    @Column(name = "price")
+    private Integer price;
+
     // MVCC
     @Column(name = "expired_at")
     private LocalDateTime expiredAt;
