@@ -100,7 +100,7 @@ public class StaticFileController {
             return ResponseEntity.ok("Replicated without re-forwarding");
         }
 
-        // If uploaded locally (not replicated), still accept
+        // If uploaded locally, still accept and replicate to the next node
         log.info("📥 Received locally uploaded file: {}", fileName);
         Files.write(dest, file.getBytes());
         fileStore.register(file.getOriginalFilename());
