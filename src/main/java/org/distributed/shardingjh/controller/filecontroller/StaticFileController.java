@@ -6,11 +6,11 @@ import org.distributed.shardingjh.common.response.MgrResponseDto;
 import org.distributed.shardingjh.p2p.FingerTable;
 import org.distributed.shardingjh.model.LocalFileStore;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.core.io.ByteArrayResource;
 import org.springframework.core.io.UrlResource;
-import org.springframework.http.HttpHeaders;
-import org.springframework.http.HttpMethod;
-import org.springframework.http.MediaType;
-import org.springframework.http.ResponseEntity;
+import org.springframework.http.*;
+import org.springframework.util.LinkedMultiValueMap;
+import org.springframework.util.MultiValueMap;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.client.RestTemplate;
 import org.springframework.web.multipart.MultipartFile;
@@ -104,7 +104,34 @@ public class StaticFileController {
         log.info("📥 Received locally uploaded file: {}", fileName);
         Files.write(dest, file.getBytes());
         fileStore.register(file.getOriginalFilename());
+        replicateToNextNode(fileName);
+
         return ResponseEntity.ok("Uploaded");
+    }
+
+    private void replicateToNextNode(String fileName) {
+        try {
+            String nextNode = fingerTable.getNextNodeAfter(CURRENT_NODE_URL);
+            Path filePath = Paths.get(staticFilePath, fileName);
+            byte[] bytes = Files.readAllBytes(filePath);
+
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.MULTIPART_FORM_DATA);
+            headers.set("X-Replicated-From", CURRENT_NODE_URL);
+
+            MultiValueMap<String, Object> body = new LinkedMultiValueMap<>();
+            body.add("file", new ByteArrayResource(bytes) {
+                @Override public String getFilename() {
+                    return fileName;
+                }
+            });
+
+            HttpEntity<MultiValueMap<String, Object>> request = new HttpEntity<>(body, headers);
+            restTemplate.postForEntity(nextNode + "/static/upload", request, String.class);
+            log.info("📤 Replicated {} to {}", fileName, nextNode);
+        } catch (Exception e) {
+            log.warn("⚠️ Replication failed for {}: {}", fileName, e.getMessage());
+        }
     }
 
 }
