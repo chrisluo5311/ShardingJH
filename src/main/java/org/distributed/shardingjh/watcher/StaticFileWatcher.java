@@ -74,10 +74,13 @@ public class StaticFileWatcher implements Runnable {
 
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.MULTIPART_FORM_DATA);
+            headers.set("X-Replicated-From", CURRENT_NODE_URL); // ✅ Add replication marker
 
             MultiValueMap<String, Object> body = new LinkedMultiValueMap<>();
             body.add("file", new ByteArrayResource(bytes) {
-                @Override public String getFilename() { return fileName; }
+                @Override public String getFilename() {
+                    return fileName;
+                }
             });
 
             HttpEntity<MultiValueMap<String, Object>> request = new HttpEntity<>(body, headers);

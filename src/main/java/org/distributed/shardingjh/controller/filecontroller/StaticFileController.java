@@ -85,11 +85,25 @@ public class StaticFileController {
 
 
     @PostMapping("/static/upload")
-    public ResponseEntity<String> uploadFile(@RequestParam("file") MultipartFile file) throws IOException {
-        Path dest = Paths.get(staticFilePath, file.getOriginalFilename());
+    public ResponseEntity<String> uploadFile(
+            @RequestParam("file") MultipartFile file,
+            @RequestHeader(value = "X-Replicated-From", required = false) String replicatedFrom) throws IOException {
+
+        String fileName = file.getOriginalFilename();
+        Path dest = Paths.get(staticFilePath, fileName);
+
+        // ✅ If file was received from another node, skip triggering further replication
+        if (replicatedFrom != null && !replicatedFrom.isEmpty()) {
+            log.info("📥 Received replicated file {} from {}", fileName, replicatedFrom);
+            Files.write(dest, file.getBytes());
+            fileStore.register(fileName);
+            return ResponseEntity.ok("Replicated without re-forwarding");
+        }
+
+        // If uploaded locally (not replicated), still accept
+        log.info("📥 Received locally uploaded file: {}", fileName);
         Files.write(dest, file.getBytes());
         fileStore.register(file.getOriginalFilename());
-        log.info("📥 Received replica file: {}, saving to {}", file.getOriginalFilename(), dest.toString());
         return ResponseEntity.ok("Uploaded");
     }
 
