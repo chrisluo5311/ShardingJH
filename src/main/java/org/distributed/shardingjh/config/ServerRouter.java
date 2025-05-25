@@ -97,10 +97,6 @@ public class ServerRouter {
             return response.getBody();
         } catch (Exception e) {
             log.warn("⚠️ Failed to forward GET to {}: {}", finalUrl, e.getMessage());
-            // 回傳空的 List，如果 T 是 List
-            if (List.class.isAssignableFrom(responseType.getType().getClass())) {
-                return (T) Collections.emptyList(); // 強轉為空 List
-            }
             return null;
         }
 

@@ -67,6 +67,10 @@ public class MemberController {
             if (!node.equals(CURRENT_NODE_URL)) {
                 List<Member> remote = serverRouter.forwardGetRaw(
                         node, "/user/getAllLocal", new ParameterizedTypeReference<List<Member>>() {});
+                if (remote == null || remote.isEmpty()) {
+                    log.warn("No members found on node: {}", node);
+                    continue;
+                }
                 all.addAll(remote);
             }
         }
