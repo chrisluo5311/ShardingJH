@@ -9,7 +9,7 @@ public class ShardConst {
 
     // Shard for regular users
     public static final Integer TOTAL_SHARD_COMMON_COUNT = 2;
-    //Common shard prefix
+    // Common shard prefix
     public static final String SHARD_COMMON_PREFIX = "NORMAL_";
     // Shard for orders
     public static final String SHARD_ORDER_PREFIX = "ORDER_";

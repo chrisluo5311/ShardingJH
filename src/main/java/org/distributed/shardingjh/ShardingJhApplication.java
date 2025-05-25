@@ -12,8 +12,10 @@ public class ShardingJhApplication {
 
     public static void main(String[] args) {
 
-        // to enable the different server properties
+        // To enable the different server properties
         // run "mvn spring-boot:run -Dspring-boot.run.arguments="--spring.profiles.active=server1""
+        // run "mvn spring-boot:run -Dspring-boot.run.arguments="--spring.profiles.active=server2""
+        // run "mvn spring-boot:run -Dspring-boot.run.arguments="--spring.profiles.active=server3""
         SpringApplication.run(ShardingJhApplication.class, args);
     }
 

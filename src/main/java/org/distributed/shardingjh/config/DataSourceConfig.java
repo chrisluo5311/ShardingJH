@@ -8,8 +8,13 @@ import org.springframework.context.annotation.Configuration;
 import javax.sql.DataSource;
 
 /**
- * Configures two data source beans `shard1DataSource` and `shard2DataSource`
- * with properties prefixed with `spring.datasource.shard1` and `spring.datasource.shard2`
+ * Configure 5 data source beans
+ * - shardCommon1DataSource
+ * - shardCommon2DataSource
+ * - shardOrder2024DataSource
+ * - shardOrder2025DataSource
+ * - shardOrderOldDataSource
+ *
  * @author chris
  * */
 @Configuration

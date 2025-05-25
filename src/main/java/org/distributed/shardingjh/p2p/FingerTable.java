@@ -20,7 +20,7 @@ public class FingerTable {
         log.info("Finding next node for file: {} (hash: {})", fileName, target);
         log.info("finger table: {}", finger);
 
-        // return >= target (because of true)
+        // tailMap will return >= target (because of true)
         NavigableMap<Integer, String> tailMap = finger.tailMap(target, true);
         for (String node : tailMap.values()) {
             // skip the current node

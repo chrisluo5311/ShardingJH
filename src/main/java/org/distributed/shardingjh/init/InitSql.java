@@ -21,6 +21,12 @@ import java.util.UUID;
  * Initialize the database tables for the application.
  * This class creates the necessary tables in the database when the application starts.
  * It uses the CommandLineRunner interface to execute SQL commands after the application context is loaded.
+ * Total 5 databases are created:
+ * 1. shard_common_1: Contains member table
+ * 2. shard_common_2: Contains member table
+ * 3. shard_order_2024: Contains order_table for 2024
+ * 4. shard_order_2025: Contains order_table for 2025
+ * 5. shard_order_old: Contains order_table for old orders
  *
  * @author chris
  */
@@ -77,6 +83,7 @@ public class InitSql implements CommandLineRunner {
                 "PRIMARY KEY (order_id, version)" +
                 ");";
 
+        // Get connections to the databases
         try (Connection conn = shardCommon1.getConnection();
                 Statement stmt = conn.createStatement();
                 Connection conn2 = shardCommon2.getConnection();
