@@ -5,6 +5,7 @@ import org.distributed.shardingjh.common.constant.ShardConst;
 import org.springframework.stereotype.Component;
 
 import java.util.NavigableMap;
+import java.util.NoSuchElementException;
 import java.util.TreeMap;
 
 @Slf4j
@@ -41,5 +42,16 @@ public class FingerTable {
         }
 
         return currentNodeUrl;
+    }
+
+    public String getNextNodeAfter(String currentNodeUrl) {
+        if (finger.isEmpty()) throw new NoSuchElementException("Finger table is empty");
+        boolean found = false;
+        for (String node : finger.values()) {
+            if (found) return node;
+            if (node.equals(currentNodeUrl)) found = true;
+        }
+        // Wrap around
+        return finger.values().iterator().next();
     }
 }

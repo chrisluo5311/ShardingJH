@@ -11,17 +11,16 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestMethod;
-import org.springframework.web.bind.annotation.RequestParam;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 import org.springframework.web.client.RestTemplate;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.Paths;
 
 @Slf4j
 @RestController
@@ -82,6 +81,16 @@ public class StaticFileController {
                 .status(response.getStatusCode())
                 .headers(response.getHeaders())
                 .body(response.getBody());
+    }
+
+
+    @PostMapping("/static/upload")
+    public ResponseEntity<String> uploadFile(@RequestParam("file") MultipartFile file) throws IOException {
+        Path dest = Paths.get(staticFilePath, file.getOriginalFilename());
+        Files.write(dest, file.getBytes());
+        fileStore.register(file.getOriginalFilename());
+        log.info("📥 Received replica file: {}, saving to {}", file.getOriginalFilename(), dest.toString());
+        return ResponseEntity.ok("Uploaded");
     }
 
 }
