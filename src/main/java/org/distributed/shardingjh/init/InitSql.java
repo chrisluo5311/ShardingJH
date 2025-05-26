@@ -102,6 +102,13 @@ public class InitSql implements CommandLineRunner {
                 Connection ord_conn3 = shardOrderOld.getConnection();
                 Statement ord_stmt3 = ord_conn3.createStatement()) {
 
+            // ✅ Enable WAL mode
+            stmt.execute("PRAGMA journal_mode=WAL");
+            stmt2.execute("PRAGMA journal_mode=WAL");
+            ord_stmt.execute("PRAGMA journal_mode=WAL");
+            ord_stmt2.execute("PRAGMA journal_mode=WAL");
+            ord_stmt3.execute("PRAGMA journal_mode=WAL");
+
             // Create tables in shard_common_1
             stmt.execute("DROP TABLE IF EXISTS member");
             stmt.execute(createUserSql);
