@@ -78,6 +78,10 @@ public class OrderController {
             if (!node.equals(CURRENT_NODE_URL)) {
                 List<OrderTable> remote = serverRouter.forwardGetRaw(
                         node, "/order/findRangeLocal?startDate="+startDate+"&endDate="+endDate, new ParameterizedTypeReference<List<OrderTable>>() {});
+                if (remote == null || remote.isEmpty()) {
+                    log.warn("No orders found on node: {}", node);
+                    continue;
+                }
                 all.addAll(remote);
             }
         }
