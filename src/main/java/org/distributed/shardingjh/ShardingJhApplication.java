@@ -7,12 +7,13 @@ import org.springframework.context.annotation.PropertySource;
 import org.springframework.context.annotation.PropertySources;
 
 @ConfigurationPropertiesScan
-@PropertySources({
-    @PropertySource("classpath:shard.properties"),
-    @PropertySource("classpath:application-server1.properties"),
-    @PropertySource("classpath:application-server2.properties"),
-    @PropertySource("classpath:application-server3.properties"),
-})
+//@PropertySources({
+//        @PropertySource("classpath:shard.properties"),
+//    @PropertySource("classpath:application-server1.properties"),
+//    @PropertySource("classpath:application-server2.properties"),
+//    @PropertySource("classpath:application-server3.properties"),
+//})
+@PropertySource("classpath:shard.properties")
 @SpringBootApplication
 public class ShardingJhApplication {
 
