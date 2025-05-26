@@ -10,6 +10,7 @@ import org.distributed.shardingjh.repository.order.RequestOrder;
 import org.distributed.shardingjh.service.OrderService;
 import org.distributed.shardingjh.sharding.Impl.RangeStrategy;
 import org.springframework.beans.BeanUtils;
+import org.springframework.dao.CannotAcquireLockException;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
 
@@ -33,7 +34,7 @@ public class OrderServiceImpl implements OrderService {
     private RedisTemplate<String, OrderTable> redisTemplate;
 
     private void logRouting(String orderId, String shardKey) {
-        log.info("Order ID: {} routing to {}", orderId, shardKey);
+        log.info("[Service] Order ID: {} routing to {}", orderId, shardKey);
     }
 
     @Override
@@ -41,7 +42,7 @@ public class OrderServiceImpl implements OrderService {
         try {
             // Generate the order ID
             log.info("Save new order: {}", requestOrder);
-            String orderId = OrderIdGenerator.generateOrderId(requestOrder.getCreateTime(), requestOrder.getMemberId());
+            String orderId = requestOrder.getOrderId();
             log.info("New order ID: {}", orderId);
             OrderTable orderTable = new OrderTable();
             orderTable.setMemberId(requestOrder.getMemberId());
@@ -113,9 +114,7 @@ public class OrderServiceImpl implements OrderService {
     }
 
     /**
-     *
      * Replace old versions and insert new ones
-     *
      * */
     @Override
     public OrderTable updateOrder(OrderTable toUpdateOrder) {
@@ -127,36 +126,50 @@ public class OrderServiceImpl implements OrderService {
             logRouting(toUpdateOrder.getId().getOrderId(), shardKey);
             ShardContext.setCurrentShard(shardKey);
 
-            // Expire previous version
-            OrderTable current = orderRepository.findCurrentByOrderId(toUpdateOrder.getId().getOrderId()).orElse(null);
-            if (current == null) {
-                throw new IllegalStateException("No existing order found for update");
-            }
-
-            // Enforce manual optimistic lock
-            Integer expectedVersion = toUpdateOrder.getId().getVersion();
-            log.info("Current Order in DB version: {}", current.getId().getVersion());
-            log.info("Expected Order from client version: {}", expectedVersion);
-            if (!expectedVersion.equals(current.getId().getVersion())) {
-                throw new IllegalStateException("Version mismatch: expected " + expectedVersion + ", actual " + current.getId().getVersion());
-            }
-
-            // Expire current version
-            current.setExpiredAt(LocalDateTime.now());
-            orderRepository.save(current);
-            log.info("Older version of Order: {} expired successfully", toUpdateOrder.getId().getOrderId());
-
-            // insert new version
-            int nextVersion = current.getId().getVersion() + 1;
-            toUpdateOrder.setId(new OrderKey(toUpdateOrder.getId().getOrderId(), nextVersion));
-            toUpdateOrder.setExpiredAt(null);
-            toUpdateOrder.setIsDeleted(0);
-            orderRepository.save(toUpdateOrder);
-            log.info("Order {} version:{} updated successfully", toUpdateOrder.getId().getOrderId(), nextVersion);
-            return toUpdateOrder;
+            return attemptUpdateWithRetry(toUpdateOrder, 3);
         } finally {
             ShardContext.clear();
         }
+    }
+
+    private OrderTable attemptUpdateWithRetry(OrderTable toUpdateOrder, int maxRetries) {
+        for (int attempt = 1; attempt <= maxRetries; attempt++) {
+            try {
+                return doUpdate(toUpdateOrder);
+            } catch (CannotAcquireLockException e) {
+                log.warn("🔁 DB locked. Retry attempt {}/{}", attempt, maxRetries);
+                try {
+                    Thread.sleep(100L * attempt);
+                } catch (InterruptedException ignored) {}
+            }
+        }
+        throw new IllegalStateException("❌ Could not update due to DB lock");
+    }
+
+    private OrderTable doUpdate(OrderTable toUpdateOrder) {
+        OrderTable current = orderRepository.findCurrentByOrderId(toUpdateOrder.getId().getOrderId())
+                .orElseThrow(() -> new IllegalStateException("No existing order found"));
+
+        Integer expectedVersion = toUpdateOrder.getId().getVersion();
+        Integer actualVersion = current.getId().getVersion();
+
+        log.info("[MVCC] Expected Version: {}, Current DB Version: {}", expectedVersion, actualVersion);
+        if (!expectedVersion.equals(actualVersion)) {
+            log.warn("Version mismatch: expected {}, actual {}", expectedVersion, actualVersion);
+            throw new IllegalStateException("Version mismatch: expected " + expectedVersion + ", actual " + actualVersion);
+        }
+
+        // Expire current version
+        current.setExpiredAt(LocalDateTime.now());
+        orderRepository.save(current);
+
+        // Insert new version
+        int nextVersion = actualVersion + 1;
+        toUpdateOrder.setId(new OrderKey(toUpdateOrder.getId().getOrderId(), nextVersion));
+        toUpdateOrder.setExpiredAt(null);
+        toUpdateOrder.setIsDeleted(0);
+
+        return orderRepository.save(toUpdateOrder);
     }
 
     @Override

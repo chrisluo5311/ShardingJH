@@ -4,9 +4,15 @@ import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.boot.context.properties.ConfigurationPropertiesScan;
 import org.springframework.context.annotation.PropertySource;
+import org.springframework.context.annotation.PropertySources;
 
 @ConfigurationPropertiesScan
-@PropertySource("classpath:shard.properties")
+@PropertySources({
+    @PropertySource("classpath:shard.properties"),
+    @PropertySource("classpath:application-server1.properties"),
+    @PropertySource("classpath:application-server2.properties"),
+    @PropertySource("classpath:application-server3.properties"),
+})
 @SpringBootApplication
 public class ShardingJhApplication {
 
