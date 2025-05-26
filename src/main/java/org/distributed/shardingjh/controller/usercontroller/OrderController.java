@@ -66,7 +66,8 @@ public class OrderController {
             OrderTable result = orderServiceImpl.updateOrder(order);
             return (result == null) ? MgrResponseDto.error(MgrResponseCode.ORDER_NOT_FOUND) : MgrResponseDto.success(result);
         } catch (IllegalStateException e) {
-            return MgrResponseDto.error(MgrResponseCode.DB_CONFLICT);
+            return MgrResponseDto.error(MgrResponseCode.DB_CONFLICT.getCode(),MgrResponseCode.DB_CONFLICT.getMessage()+
+                    " - " + e.getMessage());
         }
     }
 

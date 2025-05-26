@@ -25,7 +25,7 @@ public class RangeStrategy implements ShardingStrategy {
             throw new IllegalArgumentException("Invalid Order: Date cannot be null");
         }
         String year = String.valueOf(date.getYear());
-        log.info("Order Date: {}", date.toString());
+        log.info("[Sharding] Order Date: {}", date.toString());
         if (date.isEqual(LocalDate.of(2025, 1, 1).atStartOfDay())
                 || date.isAfter(LocalDate.of(2025, 1, 1).atStartOfDay())) {
             // e.g., key is "ORDER_2025"

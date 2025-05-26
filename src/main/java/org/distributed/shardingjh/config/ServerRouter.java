@@ -38,7 +38,7 @@ public class ServerRouter {
      */
     public String getMemberResponsibleServerUrl(String id) {
         int target = Math.abs(id.hashCode()) % ShardConst.FINGER_MAX_RANGE;
-        log.info("Routing member id: {} (hash: {})", id, target);
+        log.info("[P2P] Routing member id: {} (hash: {})", id, target);
         // Return the first node ≥ target or wrap around to the first node
         Map.Entry<Integer, String> entry = fingerTable.finger.ceilingEntry(target);
         return entry != null ? entry.getValue() : fingerTable.finger.firstEntry().getValue();
@@ -51,7 +51,7 @@ public class ServerRouter {
      * */
     public String getOrderResponsibleServerUrl(String orderId) {
         int target = Math.abs(orderId.hashCode()) % ShardConst.FINGER_MAX_RANGE;
-        log.info("Routing order id: {} (hash: {})", orderId, target);
+        log.info("[P2P] Routing order id: {} (hash: {})", orderId, target);
         // Return the first node ≥ target or wrap around to the first node
         Map.Entry<Integer, String> entry = fingerTable.finger.ceilingEntry(target);
         return entry != null ? entry.getValue() : fingerTable.finger.firstEntry().getValue();
