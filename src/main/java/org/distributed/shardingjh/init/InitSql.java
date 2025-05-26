@@ -142,7 +142,7 @@ public class InitSql implements CommandLineRunner {
             int maxDataSize = 30;
 
             TreeMap<Integer, String> serverUrls = new TreeMap<>(Map.of(
-                64, "http://3.147.58.62:8081",
+                64, "http://18.222.111.89:8081",
                 128, "http://3.15.149.110:8082",
                 192, "http://52.15.151.104:8083"
             ));
