@@ -34,12 +34,19 @@ public class MgrResponseDto<T> {
         return dto;
     }
 
-    public static MgrResponseDto<Void> error(String code, String message) {
-        MgrResponseDto<Void> dto = new MgrResponseDto<Void>();
+    public static <T> MgrResponseDto<T> error(String code, String message) {
+        MgrResponseDto<T> dto = new MgrResponseDto<>();
         dto.setCode(code);
         dto.setMessage(message);
         return dto;
     }
+
+//    public static MgrResponseDto<Void> error(String code, String message) {
+//        MgrResponseDto<Void> dto = new MgrResponseDto<Void>();
+//        dto.setCode(code);
+//        dto.setMessage(message);
+//        return dto;
+//    }
 
     public static MgrResponseDto<Void> success() {
         return success(null);
