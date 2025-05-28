@@ -10,7 +10,7 @@ public class GossipMsg {
     private String timestamp;
     private String signature;
     
-    public enum Type {  HOSTDOWN, HOSTUP, HOSTREMOVE, HOSTADD, HOSTUPDATE }
+    public enum Type {  HOSTDOWN, HOSTUP, HOSTREMOVE, HOSTADD, HOSTUPDATE,TABLEUPDATE}
     public String getMsgType() {
         return msgType;
     }
