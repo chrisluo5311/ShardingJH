@@ -11,6 +11,8 @@ import org.distributed.shardingjh.repository.order.RequestOrder;
 import org.distributed.shardingjh.service.Impl.OrderServiceImpl;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.ParameterizedTypeReference;
+import org.springframework.http.ResponseEntity;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.ArrayList;
@@ -125,5 +127,11 @@ public class OrderController {
             return MgrResponseDto.error(MgrResponseCode.ORDER_NOT_FOUND);
         }
         return MgrResponseDto.success(history);
+    }
+
+    @PostMapping("/order/updateAndFail")
+    public ResponseEntity<String> updateAndFail(@RequestBody OrderTable order) {
+        orderServiceImpl.updateWithRetryAndRollback(order);
+        return ResponseEntity.ok("Should never reach here");
     }
 }

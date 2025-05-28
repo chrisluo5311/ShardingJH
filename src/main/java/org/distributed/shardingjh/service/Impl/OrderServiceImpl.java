@@ -1,6 +1,9 @@
 package org.distributed.shardingjh.service.Impl;
 
 import jakarta.annotation.Resource;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.EntityManagerFactory;
+import jakarta.persistence.PersistenceContext;
 import lombok.extern.slf4j.Slf4j;
 import org.distributed.shardingjh.context.ShardContext;
 import org.distributed.shardingjh.model.OrderKey;
@@ -13,6 +16,12 @@ import org.springframework.beans.BeanUtils;
 import org.springframework.dao.CannotAcquireLockException;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.TransactionDefinition;
+import org.springframework.transaction.TransactionStatus;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.interceptor.TransactionAspectSupport;
+import org.springframework.transaction.support.DefaultTransactionDefinition;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -30,8 +39,13 @@ public class OrderServiceImpl implements OrderService {
     @Resource
     private OrderRepository orderRepository;
 
+    // EntityManager is used to interact with the persistence context (i.e., to perform database operations like queries, inserts, updates, and deletes).
+    // Each EntityManager instance represents a single unit of work and should be closed after use to release resources.
+    @PersistenceContext(unitName = "shardingOrder")
+    private EntityManager em;
+
     @Resource
-    private RedisTemplate<String, OrderTable> redisTemplate;
+    private PlatformTransactionManager txManager;
 
     private void logRouting(String orderId, String shardKey) {
         log.info("[Service] Order ID: {} routing to {}", orderId, shardKey);
@@ -118,58 +132,86 @@ public class OrderServiceImpl implements OrderService {
      * */
     @Override
     public OrderTable updateOrder(OrderTable toUpdateOrder) {
-        try {
-            log.info("Update Order: {}", toUpdateOrder.getId().getOrderId());
-
-            // Find shard and Set the shard key
-            String shardKey = rangeStrategy.resolveShard(toUpdateOrder.getCreateTime());
-            logRouting(toUpdateOrder.getId().getOrderId(), shardKey);
-            ShardContext.setCurrentShard(shardKey);
-
-            return attemptUpdateWithRetry(toUpdateOrder, 3);
-        } finally {
-            ShardContext.clear();
-        }
+        return updateWithRetryAndRollback(toUpdateOrder);
     }
 
-    private OrderTable attemptUpdateWithRetry(OrderTable toUpdateOrder, int maxRetries) {
+    public OrderTable updateWithRetryAndRollback(OrderTable toUpdateOrder) {
+        String orderId = toUpdateOrder.getId().getOrderId();
+        log.info("[Manual TX] Start transactional update for: {}", orderId);
+        // Shard routing
+        String shardKey = rangeStrategy.resolveShard(toUpdateOrder.getCreateTime());
+        log.info("Routing order {} to shard {}", orderId, shardKey);
+        ShardContext.setCurrentShard(shardKey);
+
+        // Reason for multiple attempts:
+        // To generate MVCC DB_CONFLICT error because the first attempt will fail due to sqlite "DB locked"
+        int maxRetries = 3;
         for (int attempt = 1; attempt <= maxRetries; attempt++) {
+            // Creates a new transaction definition object,
+            // allowing you to customize transaction properties (like propagation, isolation, etc.)
+            DefaultTransactionDefinition def = new DefaultTransactionDefinition();
+            // Sets a name for the transaction
+            def.setName("ManualRollbackTX");
+            // PROPAGATION_REQUIRED: if a transaction already exists, the method will join it;
+            // if not, a new transaction will be started.
+            def.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRED);
+            TransactionStatus status = txManager.getTransaction(def);
             try {
-                return doUpdate(toUpdateOrder);
+                em.joinTransaction();
+
+                // MVCC check - Fetch current version
+                OrderTable current = orderRepository.findCurrentByOrderId(orderId)
+                        .orElseThrow(() -> new IllegalStateException("No existing order found"));
+
+                int expectedVersion = toUpdateOrder.getId().getVersion();
+                int actualVersion = current.getId().getVersion();
+
+                log.info("[MVCC] Expected: {}, Actual: {}", expectedVersion, actualVersion);
+                if (expectedVersion != actualVersion) {
+                    throw new IllegalStateException("Version mismatch: expected " + expectedVersion + ", actual " + actualVersion);
+                }
+
+                // Expire current
+                current.setExpiredAt(LocalDateTime.now());
+                em.merge(current);
+
+                // Insert new version
+                int nextVersion = actualVersion + 1;
+                toUpdateOrder.setId(new OrderKey(orderId, nextVersion));
+                toUpdateOrder.setExpiredAt(null);
+                toUpdateOrder.setIsDeleted(0);
+                em.persist(toUpdateOrder);
+
+                // [Comment out if not test] Simulated Rollback error
+//                if (attempt == 1) {
+//                    throw new RuntimeException("Simulated failure 🤯");
+//                }
+
+                txManager.commit(status); // Success
+                log.info("Transaction committed on attempt {}", attempt);
+                return toUpdateOrder;
             } catch (CannotAcquireLockException e) {
-                log.warn("🔁 DB locked. Retry attempt {}/{}", attempt, maxRetries);
-                try {
-                    Thread.sleep(100L * attempt);
-                } catch (InterruptedException ignored) {}
+                txManager.rollback(status);
+                em.close();
+                log.warn("DB locked. Attempt {}/{} failed. Retrying...", attempt, maxRetries);
+                sleep(attempt * 100L);
+            } catch (Exception e) {
+                txManager.rollback(status);
+                em.close();
+                log.error("Rolling back transaction due to: {}", e.getMessage());
+                throw e; // Re-throw for controller to catch
+            } finally {
+                em.close();
+                ShardContext.clear();
             }
         }
-        throw new IllegalStateException("❌ Could not update due to DB lock");
+        throw new IllegalStateException("All retry attempts failed for update");
     }
 
-    private OrderTable doUpdate(OrderTable toUpdateOrder) {
-        OrderTable current = orderRepository.findCurrentByOrderId(toUpdateOrder.getId().getOrderId())
-                .orElseThrow(() -> new IllegalStateException("No existing order found"));
-
-        Integer expectedVersion = toUpdateOrder.getId().getVersion();
-        Integer actualVersion = current.getId().getVersion();
-
-        log.info("[MVCC] Expected Version: {}, Current DB Version: {}", expectedVersion, actualVersion);
-        if (!expectedVersion.equals(actualVersion)) {
-            log.warn("Version mismatch: expected {}, actual {}", expectedVersion, actualVersion);
-            throw new IllegalStateException("Version mismatch: expected " + expectedVersion + ", actual " + actualVersion);
-        }
-
-        // Expire current version
-        current.setExpiredAt(LocalDateTime.now());
-        orderRepository.save(current);
-
-        // Insert new version
-        int nextVersion = actualVersion + 1;
-        toUpdateOrder.setId(new OrderKey(toUpdateOrder.getId().getOrderId(), nextVersion));
-        toUpdateOrder.setExpiredAt(null);
-        toUpdateOrder.setIsDeleted(0);
-
-        return orderRepository.save(toUpdateOrder);
+    private void sleep(long ms) {
+        try {
+            Thread.sleep(ms);
+        } catch (InterruptedException ignored) {}
     }
 
     @Override
