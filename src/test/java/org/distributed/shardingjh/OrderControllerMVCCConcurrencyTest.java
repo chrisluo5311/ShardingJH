@@ -5,9 +5,12 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
 import org.distributed.shardingjh.model.OrderTable;
 import org.distributed.shardingjh.repository.order.RequestOrder;
+import org.distributed.shardingjh.util.EncryptUtil;
+import org.distributed.shardingjh.util.OrderSignatureUtil;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
@@ -45,6 +48,9 @@ public class OrderControllerMVCCConcurrencyTest {
 
     private RequestOrder initialOrder;
 
+    @Value("${sha256.secret.key}")
+    private String SECRET_KEY;
+
     @BeforeEach
     public void setup() {
         initialOrder = new RequestOrder();
@@ -55,12 +61,19 @@ public class OrderControllerMVCCConcurrencyTest {
         initialOrder.generateOrderId();
     }
 
+    /**
+     * #TODO: open firstFailureSimulated.compareAndExchange check
+     * If don't open check, real world situation would both rollback
+     * */
     @Test
     public void testMVCCConflictOnConcurrentUpdate() throws Exception {
+        String bodyJson = OrderSignatureUtil.toCanonicalJson(initialOrder, objectMapper);
+        String signature = EncryptUtil.hmacSha256(bodyJson, SECRET_KEY);
         // Step 1: Save original order
         String savedJson = mockMvc.perform(post("/order/save")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(initialOrder)))
+                        .header("X-Signature", signature)
+                        .content(bodyJson))
                 .andExpect(status().isOk())
                 .andReturn().getResponse().getContentAsString();
 
@@ -68,8 +81,8 @@ public class OrderControllerMVCCConcurrencyTest {
         OrderTable savedOrder = objectMapper.convertValue(savedResponse.getData(), OrderTable.class);
 
         // Step 2: Make two copies
-        OrderTable updateA = objectMapper.readValue(objectMapper.writeValueAsString(savedOrder), OrderTable.class);
-        OrderTable updateB = objectMapper.readValue(objectMapper.writeValueAsString(savedOrder), OrderTable.class);
+        OrderTable updateA = objectMapper.readValue(OrderSignatureUtil.toCanonicalJson(savedOrder, objectMapper), OrderTable.class);
+        OrderTable updateB = objectMapper.readValue(OrderSignatureUtil.toCanonicalJson(savedOrder, objectMapper), OrderTable.class);
         // Modify the copies
         updateA.setPrice(111);
         updateB.setPrice(999);
@@ -96,9 +109,13 @@ public class OrderControllerMVCCConcurrencyTest {
 
     private String sendUpdate(OrderTable order) {
         try {
+            // Generate signature for the update
+            String bodyJson = OrderSignatureUtil.toCanonicalJson(order, objectMapper);
+            String signature = EncryptUtil.hmacSha256(bodyJson, SECRET_KEY);
             return mockMvc.perform(post("/order/update")
                             .contentType(MediaType.APPLICATION_JSON)
-                            .content(objectMapper.writeValueAsString(order)))
+                            .header("X-Signature", signature)
+                            .content(bodyJson))
                     .andReturn().getResponse().getContentAsString();
         } catch (Exception e) {
             return "{\"code\":\"ERROR\",\"message\":\"" + e.getMessage() + "\"}";

@@ -28,6 +28,7 @@ import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 @Slf4j
 @Service
@@ -38,6 +39,9 @@ public class OrderServiceImpl implements OrderService {
 
     @Resource
     private OrderRepository orderRepository;
+
+    private static final AtomicBoolean firstFailureSimulated = new AtomicBoolean(false);
+
 
     // EntityManager is used to interact with the persistence context (i.e., to perform database operations like queries, inserts, updates, and deletes).
     // Each EntityManager instance represents a single unit of work and should be closed after use to release resources.
@@ -182,7 +186,14 @@ public class OrderServiceImpl implements OrderService {
                 toUpdateOrder.setIsDeleted(0);
                 em.persist(toUpdateOrder);
 
-                // [Comment out if not test] Simulated Rollback error
+                // [Comment out if not test] Test MVCC
+                // only the first thread that reaches this line triggers the failure,
+                // allowing the second thread to retry and hit a version mismatch
+//                if (firstFailureSimulated.compareAndExchange(false, true)) {
+//                    throw new RuntimeException("Simulated failure 🤯");
+//                }
+
+                // // [Comment out if not test] Test rollback
 //                if (attempt == 1) {
 //                    throw new RuntimeException("Simulated failure 🤯");
 //                }

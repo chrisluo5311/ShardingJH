@@ -1,18 +1,18 @@
 package org.distributed.shardingjh.config;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.distributed.shardingjh.common.constant.ShardConst;
 import org.distributed.shardingjh.p2p.FingerTable;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.ParameterizedTypeReference;
-import org.springframework.http.HttpMethod;
-import org.springframework.http.ResponseEntity;
+import org.springframework.http.*;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestTemplate;
 
 import java.net.URI;
-import java.util.Collections;
-import java.util.List;
 import java.util.Map;
 
 /**
@@ -25,6 +25,9 @@ import java.util.Map;
 @Slf4j
 @Component
 public class ServerRouter {
+
+    @Resource
+    private ObjectMapper objectMapper;
 
     @Resource
     FingerTable fingerTable;
@@ -60,45 +63,73 @@ public class ServerRouter {
     /**
      * Forward a POST request with a body to the correct server
      */
-    public <T> T forwardPost(String serverUrl, String endpointPath, Object requestBody, Class<T> responseType) {
+    public <T> T forwardPost(String serverUrl, String endpointPath, String fronEndSignature, Object requestBody, Class<T> responseType) throws JsonProcessingException {
         String finalUrl = serverUrl + endpointPath;
-        return restTemplate.postForObject(URI.create(finalUrl), requestBody, responseType);
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_JSON);
+        headers.set("X-Signature", fronEndSignature);
+        String jsonBody = objectMapper.writeValueAsString(requestBody);
+
+        HttpEntity<String> entity = new HttpEntity<>(jsonBody, headers);
+        return restTemplate.postForObject(URI.create(finalUrl), entity, responseType);
     }
 
     /**
      * Forward a GET request with query params to the correct server
      */
-    public <T> T forwardGet(String url, String endpointWithQuery, Class<T> responseType) {
+    public <T> T forwardGet(String url, String endpointWithQuery, String fronEndSignature, Class<T> responseType) {
         String finalUrl = url + endpointWithQuery;
-        return restTemplate.getForObject(URI.create(finalUrl), responseType);
+        HttpHeaders headers = new HttpHeaders();
+        headers.set("X-Signature", fronEndSignature);
+        HttpEntity<Void> entity = new HttpEntity<>(headers);
+
+        ResponseEntity<T> response = restTemplate.exchange(
+                URI.create(finalUrl),
+                HttpMethod.GET,
+                entity,
+                responseType
+        );
+        return response.getBody();
     }
 
 
     /**
      * Forward a DELETE request to the correct server
      */
-    public void forwardDelete(String url, String endpointPath) {
+    public void forwardDelete(String url, String endpointPath, String fronEndSignature) {
         String finalUrl = url + endpointPath;
-        restTemplate.delete(URI.create(finalUrl));
+        HttpHeaders headers = new HttpHeaders();
+        headers.set("X-Signature", fronEndSignature);
+
+        HttpEntity<Void> entity = new HttpEntity<>(headers);
+
+        restTemplate.exchange(
+                URI.create(finalUrl),
+                HttpMethod.DELETE,
+                entity,
+                Void.class
+        );
     }
 
     /**
      * Forward a GET request to the correct server and return raw response
      */
-    public <T> T forwardGetRaw(String url, String endpointPath, ParameterizedTypeReference<T> responseType) {
+    public <T> T forwardGetRaw(String url, String endpointPath, String frontEndSignature, ParameterizedTypeReference<T> responseType) {
         String finalUrl = url + endpointPath;
         try {
+            HttpHeaders headers = new HttpHeaders();
+            headers.set("X-Signature", frontEndSignature);
+            HttpEntity<Void> entity = new HttpEntity<>(headers);
             ResponseEntity<T> response = restTemplate.exchange(
                     URI.create(finalUrl),
                     HttpMethod.GET,
-                    null,
+                    entity,
                     responseType
             );
             return response.getBody();
         } catch (Exception e) {
-            log.warn("⚠️ Failed to forward GET to {}: {}", finalUrl, e.getMessage());
+            log.warn("[forwardGetRaw] Failed to forward GET to {}: {}", finalUrl, e.getMessage());
             return null;
         }
-
     }
 }

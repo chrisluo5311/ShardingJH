@@ -28,7 +28,7 @@ class ShardingPropertiesTest {
         Map<String, String> lookup = shardingProperties.getLookup();
         log.info("Sharding lookup: {}", lookup);
         assertThat(lookup).isNotNull();
-        assertThat(lookup).containsEntry("NORMAL_1", "shard_common_1.db");
-        assertThat(lookup).containsEntry("NORMAL_2", "shard_common_2.db");
+        assertThat(lookup).containsEntry("NORMAL_1", "shard_common_1");
+        assertThat(lookup).containsEntry("NORMAL_2", "shard_common_2");
     }
 }

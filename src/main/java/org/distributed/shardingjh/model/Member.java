@@ -19,9 +19,4 @@ public class Member {
     @Size(max = 20)
     @Column(name = "name")
     private String name;
-
-    // Default constructor will generate the UUID during instance creation.
-    public Member() {
-        this.id = UUID.randomUUID().toString();
-    }
 }
