@@ -144,7 +144,8 @@ public class InitSql implements CommandLineRunner {
             TreeMap<Integer, String> serverUrls = new TreeMap<>(Map.of(
                 64, "http://18.222.111.89:8081",
                 128, "http://3.15.149.110:8082",
-                192, "http://52.15.151.104:8083"
+                192, "http://52.15.151.104:8083",
+                224, "http://3.22.61.73:8084"
             ));
 
 //            TreeMap<Integer, String> serverUrls = new TreeMap<>(Map.of(
