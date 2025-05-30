@@ -113,7 +113,7 @@ public class GossipService {
             String[] partsNeighbor = neighborUrl.split(":");
             String neighborIp = partsNeighbor[1].replace("//", "");
 //            int port = Integer.parseInt(partsNeighbor[2]);
-            log.info("[GossipService] Sending gossip message to neighbor: {}", neighborUrl);
+            log.info("[GossipService] Sending gossip message to neighbor: {}", neighborIp);
             if (!neighborIp.equals(getCurrentIp()) && !uniqueNeighbors.contains(neighborUrl)) {
                 gossipSender.sendGossip(gossipMsg, neighborIp, PORT);
                 uniqueNeighbors.add(neighborUrl);
