@@ -23,6 +23,10 @@ jobs:
             HOST_SECRET: HOST3_DNS
             SSH_SECRET: EC2_SSH_KEY3
             PROFILE: server3
+          - server: 4
+            HOST_SECRET: HOST4_DNS
+            SSH_SECRET: EC2_SSH_KEY4
+            PROFILE: server4
 
     steps:
       - name: Checkout the files
