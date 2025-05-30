@@ -6,13 +6,13 @@ import org.springframework.stereotype.Component;
 
 import java.util.NavigableMap;
 import java.util.NoSuchElementException;
-import java.util.TreeMap;
+import java.util.concurrent.ConcurrentSkipListMap;
 import java.util.stream.Collectors;
 
 @Slf4j
 @Component
 public class FingerTable {
-    public final TreeMap<Integer, String> finger = new TreeMap<>();
+    public final ConcurrentSkipListMap<Integer, String> finger = new ConcurrentSkipListMap<>();
 
     public void addEntry(int hash, String address) {
         finger.put(hash, address);
