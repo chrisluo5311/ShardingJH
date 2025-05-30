@@ -4,15 +4,17 @@ import java.net.DatagramPacket;
 import java.net.DatagramSocket;
 import java.net.InetAddress;
 import java.nio.charset.StandardCharsets;
-import java.util.List;
+import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 
+import lombok.extern.slf4j.Slf4j;
 import org.distributed.shardingjh.p2p.FingerTable;
-import org.springframework.stereotype.Component;
-
 import jakarta.annotation.Resource;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.stereotype.Service;
 
-@Component
+@Slf4j
+@Service
 public class GossipService {
     // Message cache for deduplication, key is the unique identifier of the message, value is the receive count
     private final ConcurrentHashMap<String, Integer> msgCache = new ConcurrentHashMap<>();
@@ -21,190 +23,163 @@ public class GossipService {
     @Resource
     private FingerTable fingerTable;
 
-    public void sendMessage(GossipMsg msg, List<GossipNode> neighbors, int numberOfNodes) {
-        try{        
-            DatagramSocket socket = new DatagramSocket();
-            byte[] data = msg.toJson().getBytes(StandardCharsets.UTF_8);
-            for (GossipNode neighbor : neighbors) {
-                if (neighbor.getStatus().equals("UP")) {
-                    InetAddress address = InetAddress.getByName(neighbor.getIp());
-                    int port = neighbor.getPort();
-                    DatagramPacket packet = new DatagramPacket(data, data.length, address, port);
-                    socket.send(packet);
-                }
-            }
-            socket.close();
-        }
-        catch(Exception e){
-            e.printStackTrace();
-        }
+    @Resource
+    GossipSender gossipSender;
+
+    @Value("${router.server-url}")
+    private String CURRENT_NODE_URL;
+
+    @Value("${gossip.port}")
+    private int PORT;
+
+    // http://3.15.149.110:8082 => 3.15.149.110
+    public String getCurrentIp() {
+        return CURRENT_NODE_URL.split(":")[1].replace("//", "");
     }
 
-    public void listen(int port) {
-        try {
-            DatagramSocket socket = new DatagramSocket(port);
-            byte[] buffer = new byte[1024];
-            while (true) {
-                DatagramPacket packet = new DatagramPacket(buffer, buffer.length);
-                socket.receive(packet);
-                GossipMsg message = GossipMsg.fromJson(new String(packet.getData(), 0, packet.getLength(), StandardCharsets.UTF_8));
-                msgHandle(message);
-                
-            }
-            // socket.close();
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-    }
-
+    /**
+     * Handle received gossip messages.
+     *
+     * */
     public void msgHandle(GossipMsg message) {
-        // Construct the unique identifier for the message
-        String msgKey = message.getSenderId() + "_" + message.getMsgType() + "_" + message.getMsgContent() + "_" + message.getTimestamp();
-        // Check if the message has already been received
+        // Check if the message has already been received (e.g., "HOST_ADD_64=http://18.222.111.89:8081")
+        String msgKey = message.getMsgType() + "_" + message.getMsgContent();
+        log.info("[GossipService] Received gossip message key: {}", msgKey);
         Integer count = msgCache.getOrDefault(msgKey, 0);
         if (count >= 1) {
-            // Discard if received for the second time or more
+            log.info("[GossipService] Duplicate gossip message received, ignoring: {}", msgKey);
             return;
         }
-        // First time received, process and count
         msgCache.put(msgKey, count + 1);
-        // Control cache size to prevent memory leak
         if (msgCache.size() > CACHE_SIZE_LIMIT) {
-            // Simple cleanup strategy: clear all (can be optimized to LRU, etc.)
             msgCache.clear();
         }
-        if (message.getMsgType().equals(GossipMsg.Type.HOSTDOWN.toString())) {
-            // Handle gossip message: remove host from finger table
-            try {
-                int hash = Integer.parseInt(message.getMsgContent());
-                fingerTable.finger.remove(hash);
-            } catch (Exception e) {
-                e.printStackTrace();
-            }
-        } else if (message.getMsgType().equals(GossipMsg.Type.HOSTUP.toString())) {
-            // Handle gossip message: add or update host in finger table
-            try {
-                String[] parts = message.getMsgContent().split("=");
-                int hash = Integer.parseInt(parts[0]);
-                String address = parts[1];
-                fingerTable.addEntry(hash, address);
-            } catch (Exception e) {
-                e.printStackTrace();
-            }
-        } else if (message.getMsgType().equals(GossipMsg.Type.HOSTREMOVE.toString())) {
-            // Handle gossip message: remove host from finger table
-            try {
-                int hash = Integer.parseInt(message.getMsgContent());
-                fingerTable.finger.remove(hash);
-            } catch (Exception e) {
-                e.printStackTrace();
-            }
-        } else if (message.getMsgType().equals(GossipMsg.Type.HOSTADD.toString())) {
-            // Handle gossip message: add host to finger table
-            try {
-                String[] parts = message.getMsgContent().split("=");
-                int hash = Integer.parseInt(parts[0]);
-                String address = parts[1];
-                fingerTable.addEntry(hash, address);
-                // After adding, send local finger table to the new node
-                // Find the new node in neighbors by address
-                GossipNode newNode = null;
-                for (GossipNode neighbor : fingerTable.finger.values().stream().map(addr -> {
-                    GossipNode node = new GossipNode();
-                    node.setIp(addr.split(":")[0].replace("http://", ""));
-                    node.setPort(Integer.parseInt(addr.split(":")[1]));
-                    node.setStatus("UP");
-                    return node;
-                }).toList()) {
-                    if (neighbor.getIp().equals(address.split(":")[0].replace("http://", "")) && neighbor.getPort() == Integer.parseInt(address.split(":")[1])) {
-                        newNode = neighbor;
-                        break;
+
+        // Handle the gossip message based on its type
+        try {
+            GossipMsg gossipMsg = null;
+            switch (message.getMsgType()) {
+                case HOST_DOWN: {
+                    // Remove host from finger table
+                    int hash = Integer.parseInt(message.getMsgContent());
+                    fingerTable.finger.remove(hash);
+                    gossipMsg = GossipMsg.builder()
+                                        .msgType(GossipMsg.Type.HOST_DOWN)
+                                        .msgContent(fingerTable.finger.toString())
+                                        .build();
                     }
-                }
-                if (newNode != null) {
-                    // Serialize finger table as string: hash1=addr1,hash2=addr2,...
-                    StringBuilder sb = new StringBuilder();
-                    for (var entry : fingerTable.finger.entrySet()) {
-                        sb.append(entry.getKey()).append("=").append(entry.getValue()).append(",");
-                    }
-                    if (sb.length() > 0) sb.setLength(sb.length() - 1);
-                    sendTableUpdateGossip(newNode, message.getSenderId(), sb.toString(), List.of(newNode), 1);
-                }
-            } catch (Exception e) {
-                e.printStackTrace();
-            }
-        } else if (message.getMsgType().equals(GossipMsg.Type.TABLEUPDATE.toString())) {
-            // Handle TABLEUPDATE message: update local finger table from received content
-            try {
-                String content = message.getMsgContent();
-                if (content != null && !content.isEmpty()) {
-                    String[] entries = content.split(",");
-                    for (String entry : entries) {
-                        String[] kv = entry.split("=");
-                        if (kv.length == 2) {
-                            int hash = Integer.parseInt(kv[0]);
-                            String address = kv[1];
-                            fingerTable.addEntry(hash, address);
+                    break;
+                case HOST_ADD: {
+                    // Add host to finger table
+                    // {64=http://localhost:8081, 224=http://localhost:8084}
+                    log.info("[GossipService] Received HOST_ADD gossip message: {}", message.getMsgContent());
+                    String cleaned = message.getMsgContent().replaceAll("[\\{\\} ]", "");
+                    String[] parts = cleaned.split(",");
+                    for (String part: parts) {
+                        String[] eachParts = part.split("=");
+                        int hash = Integer.parseInt(eachParts[0]);
+                        String address = eachParts[1];
+                        if (!fingerTable.finger.containsKey(hash)) {
+                            fingerTable.addEntry(hash,address);
+                            log.info("[GossipService] Added host to finger table: {}={}", hash, address);
                         }
                     }
-                }
-            } catch (Exception e) {
-                e.printStackTrace();
+                    gossipMsg = GossipMsg.builder()
+                                        .msgType(GossipMsg.Type.HOST_ADD)
+                                        .msgContent(fingerTable.finger.toString())
+                                        .build();
+                    }
+                    break;
             }
+            randomSendGossip(gossipMsg, new ArrayList<>(fingerTable.finger.values()));
+        } catch (Exception e) {
+            log.error("[GossipService] Failed to handle gossip message: {}", e.getMessage());
+        }
+    }
+
+    public void randomSendGossip(GossipMsg gossipMsg, List<String> neighbors) {
+        if (neighbors.isEmpty()) {
+            log.warn("[GossipService] No neighbors to send gossip message to.");
+            return;
+        }
+
+        // Randomly select 2 neighbors
+        Collections.shuffle(neighbors);
+        int pickCount = Math.min(2, neighbors.size());
+        Set<String> uniqueNeighbors = new HashSet<>();
+
+        while (pickCount > 0) {
+            String neighborUrl = neighbors.get(new Random().nextInt(neighbors.size()));
+            String[] partsNeighbor = neighborUrl.split(":");
+            String neighborIp = partsNeighbor[1].replace("//", "");
+//            int port = Integer.parseInt(partsNeighbor[2]);
+            log.info("[GossipService] Sending gossip message to neighbor: {}", neighborUrl);
+            if (!neighborIp.equals(getCurrentIp()) && !uniqueNeighbors.contains(neighborUrl)) {
+                gossipSender.sendGossip(gossipMsg, neighborIp, PORT);
+                uniqueNeighbors.add(neighborUrl);
+                pickCount--;
+            }
+
+            // For testing purposes
+//            if (port == 8081) {
+//                gossipSender.sendGossip(gossipMsg, neighborIp, 9000);
+//                uniqueNeighbors.add(neighborUrl);
+//                pickCount--;
+//            }
         }
     }
 
     // Send HOSTUP gossip message
-    public void sendHostUpGossip(GossipNode self, int hash, String address, int numberOfNodes) {
-        GossipMsg msg = new GossipMsg();
-        msg.setMsgType(GossipMsg.Type.HOSTUP.toString());
-        msg.setMsgContent(hash + "=" + address);
-        msg.setSenderId(self.getId());
-        msg.setTimestamp(String.valueOf(System.currentTimeMillis()));
-        sendMessage(msg, self.getNeighbors(), numberOfNodes);
-    }
-
-    // Send HOSTDOWN gossip message
-    public void sendHostDownGossip(GossipNode self, int hash, int numberOfNodes) {
-        GossipMsg msg = new GossipMsg();
-        msg.setMsgType(GossipMsg.Type.HOSTDOWN.toString());
-        msg.setMsgContent(String.valueOf(hash));
-        msg.setSenderId(self.getId());
-        msg.setTimestamp(String.valueOf(System.currentTimeMillis()));
-        sendMessage(msg, self.getNeighbors(), numberOfNodes);
-    }
-
-    // Send HOSTADD gossip message
-    public void sendHostAddGossip(GossipNode self, int hash, String address, int numberOfNodes) {
-        GossipMsg msg = new GossipMsg();
-        msg.setMsgType(GossipMsg.Type.HOSTADD.toString());
-        msg.setMsgContent(hash + "=" + address);
-        msg.setSenderId(self.getId());
-        msg.setTimestamp(String.valueOf(System.currentTimeMillis()));
-        sendMessage(msg, self.getNeighbors(), numberOfNodes);
-    }
-
-    // Send HOSTREMOVE gossip message
-    public void sendHostRemoveGossip(GossipNode self, int hash, int numberOfNodes) {
-        GossipMsg msg = new GossipMsg();
-        msg.setMsgType(GossipMsg.Type.HOSTREMOVE.toString());
-        msg.setMsgContent(String.valueOf(hash));
-        msg.setSenderId(self.getId());
-        msg.setTimestamp(String.valueOf(System.currentTimeMillis()));
-        sendMessage(msg, self.getNeighbors(), numberOfNodes);
-    }
+//    public void sendHostUpGossip(GossipNode self, int hash, String address, int numberOfNodes) {
+//        GossipMsg msg = new GossipMsg();
+//        msg.setMsgType(GossipMsg.Type.HOST_UP.toString());
+//        msg.setMsgContent(hash + "=" + address);
+//        msg.setSenderId(self.getId());
+//        msg.setTimestamp(String.valueOf(System.currentTimeMillis()));
+//        sendMessage(msg, self.getNeighbors(), numberOfNodes);
+//    }
+//
+//    // Send HOSTDOWN gossip message
+//    public void sendHostDownGossip(GossipNode self, int hash, int numberOfNodes) {
+//        GossipMsg msg = new GossipMsg();
+//        msg.setMsgType(GossipMsg.Type.HOST_DOWN.toString());
+//        msg.setMsgContent(String.valueOf(hash));
+//        msg.setSenderId(self.getId());
+//        msg.setTimestamp(String.valueOf(System.currentTimeMillis()));
+//        sendMessage(msg, self.getNeighbors(), numberOfNodes);
+//    }
+//
+//    // Send HOSTADD gossip message
+//    public void sendHostAddGossip(GossipNode self, int hash, String address, int numberOfNodes) {
+//        GossipMsg msg = new GossipMsg();
+//        msg.setMsgType(GossipMsg.Type.HOST_ADD.toString());
+//        msg.setMsgContent(hash + "=" + address);
+//        msg.setSenderId(self.getId());
+//        msg.setTimestamp(String.valueOf(System.currentTimeMillis()));
+//        sendMessage(msg, self.getNeighbors(), numberOfNodes);
+//    }
+//
+//    // Send HOSTREMOVE gossip message
+//    public void sendHostRemoveGossip(GossipNode self, int hash, int numberOfNodes) {
+//        GossipMsg msg = new GossipMsg();
+//        msg.setMsgType(GossipMsg.Type.HOST_REMOVE.toString());
+//        msg.setMsgContent(String.valueOf(hash));
+//        msg.setSenderId(self.getId());
+//        msg.setTimestamp(String.valueOf(System.currentTimeMillis()));
+//        sendMessage(msg, self.getNeighbors(), numberOfNodes);
+//    }
 
     // Send TABLEUPDATE gossip message to a specific node
-    public void sendTableUpdateGossip(GossipNode self, String receiverId, String tableContent, List<GossipNode> neighbors, int numberOfNodes) {
-        GossipMsg msg = new GossipMsg();
-        msg.setMsgType(GossipMsg.Type.TABLEUPDATE.toString());
-        msg.setMsgContent(tableContent);
-        msg.setSenderId(self.getId());
-        msg.setReceiverId(receiverId);
-        msg.setTimestamp(String.valueOf(System.currentTimeMillis()));
-        sendMessage(msg, neighbors, numberOfNodes);
-    }
+//    public void sendTableUpdateGossip(GossipNode self, String receiverId, String tableContent, List<GossipNode> neighbors, int numberOfNodes) {
+//        GossipMsg msg = new GossipMsg();
+//        msg.setMsgType(GossipMsg.Type.TABLE_UPDATE.toString());
+//        msg.setMsgContent(tableContent);
+//        msg.setSenderId(self.getId());
+//        msg.setReceiverId(receiverId);
+//        msg.setTimestamp(String.valueOf(System.currentTimeMillis()));
+//        sendMessage(msg, neighbors, numberOfNodes);
+//    }
 }
 
-    
+
 

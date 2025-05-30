@@ -7,6 +7,7 @@ import org.springframework.stereotype.Component;
 import java.util.NavigableMap;
 import java.util.NoSuchElementException;
 import java.util.TreeMap;
+import java.util.stream.Collectors;
 
 @Slf4j
 @Component
@@ -53,5 +54,12 @@ public class FingerTable {
         }
         // Wrap around
         return finger.values().iterator().next();
+    }
+
+    @Override
+    public String toString() {
+        return finger.entrySet().stream()
+                .map(entry -> entry.getKey() + "=" + entry.getValue())
+                .collect(Collectors.joining(","));
     }
 }
