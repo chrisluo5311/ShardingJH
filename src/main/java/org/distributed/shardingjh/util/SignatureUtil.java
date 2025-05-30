@@ -8,7 +8,7 @@ import lombok.extern.slf4j.Slf4j;
 import java.util.*;
 
 @Slf4j
-public class OrderSignatureUtil {
+public class SignatureUtil {
 
     public static String toCanonicalJson(Object obj, ObjectMapper objectMapper) throws JsonProcessingException {
         // Convert to a Map, then recursively sort keys

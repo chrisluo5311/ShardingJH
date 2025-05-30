@@ -11,7 +11,7 @@ import org.distributed.shardingjh.model.Member;
 import org.distributed.shardingjh.p2p.FingerTable;
 import org.distributed.shardingjh.service.Impl.MemberServiceImpl;
 import org.distributed.shardingjh.util.EncryptUtil;
-import org.distributed.shardingjh.util.OrderSignatureUtil;
+import org.distributed.shardingjh.util.SignatureUtil;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.web.bind.annotation.*;
@@ -49,7 +49,7 @@ public class MemberController {
     public MgrResponseDto<Member> saveMember(@RequestBody Member member,
                                              @RequestHeader(value = "X-Signature") String signature) throws JsonProcessingException {
         // Check signature
-        String rawBody = OrderSignatureUtil.toCanonicalJson(member, objectMapper);
+        String rawBody = SignatureUtil.toCanonicalJson(member, objectMapper);
         String expectedSignature = EncryptUtil.hmacSha256(rawBody, SECRET_KEY);
         log.info("Expected signature: {}, X-Signature: {}", expectedSignature, signature);
         if (!expectedSignature.equals(signature)) {
@@ -131,7 +131,7 @@ public class MemberController {
     public MgrResponseDto<Member> updateMember(@RequestBody Member member,
                                                @RequestHeader(value = "X-Signature") String signature) throws JsonProcessingException {
         // Check signature
-        String rawBody = OrderSignatureUtil.toCanonicalJson(member, objectMapper);
+        String rawBody = SignatureUtil.toCanonicalJson(member, objectMapper);
         String expectedSignature = EncryptUtil.hmacSha256(rawBody, SECRET_KEY);
         if (!expectedSignature.equals(signature)) {
             log.error("Signature mismatch for user update: user={}", member.getId());

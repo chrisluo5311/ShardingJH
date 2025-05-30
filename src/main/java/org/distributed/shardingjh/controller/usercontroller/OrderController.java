@@ -12,14 +12,13 @@ import org.distributed.shardingjh.p2p.FingerTable;
 import org.distributed.shardingjh.repository.order.RequestOrder;
 import org.distributed.shardingjh.service.Impl.OrderServiceImpl;
 import org.distributed.shardingjh.util.EncryptUtil;
-import org.distributed.shardingjh.util.OrderSignatureUtil;
+import org.distributed.shardingjh.util.SignatureUtil;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.*;
-import java.util.stream.Collectors;
 
 @Slf4j
 @RestController
@@ -47,7 +46,7 @@ public class OrderController {
     public MgrResponseDto<OrderTable> saveOrder(@RequestBody RequestOrder requestOrder,
                                                 @RequestHeader(value = "X-Signature") String signature) throws JsonProcessingException {
         // Check signature
-        String rawBody = OrderSignatureUtil.toCanonicalJson(requestOrder, objectMapper);
+        String rawBody = SignatureUtil.toCanonicalJson(requestOrder, objectMapper);
         String expectedSignature = EncryptUtil.hmacSha256(rawBody, SECRET_KEY);
         if (!expectedSignature.equals(signature)) {
             log.error("Signature mismatch for order: {}", requestOrder.getOrderId());
@@ -69,7 +68,7 @@ public class OrderController {
     public MgrResponseDto<String> deleteOrder(@RequestBody OrderTable order,
                                                 @RequestHeader(value = "X-Signature") String signature) throws JsonProcessingException {
         // Check signature
-        String rawBody = OrderSignatureUtil.toCanonicalJson(order, objectMapper);
+        String rawBody = SignatureUtil.toCanonicalJson(order, objectMapper);
         String expectedSignature = EncryptUtil.hmacSha256(rawBody, SECRET_KEY);
         if (!expectedSignature.equals(signature)) {
             log.error("Signature mismatch for order deletion: {}", order.getId().getOrderId());
@@ -92,7 +91,7 @@ public class OrderController {
                                                     @RequestHeader(value = "X-Signature") String signature) throws JsonProcessingException {
         try {
             // Check signature
-            String rawBody = OrderSignatureUtil.toCanonicalJson(order, objectMapper);
+            String rawBody = SignatureUtil.toCanonicalJson(order, objectMapper);
             log.info("rawBody: {}", rawBody);
             String expectedSignature = EncryptUtil.hmacSha256(rawBody, SECRET_KEY);
             log.info("Expected signature: {}, X-Signature: {}", expectedSignature, signature);

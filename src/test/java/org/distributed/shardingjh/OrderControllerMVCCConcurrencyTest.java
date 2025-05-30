@@ -6,7 +6,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.distributed.shardingjh.model.OrderTable;
 import org.distributed.shardingjh.repository.order.RequestOrder;
 import org.distributed.shardingjh.util.EncryptUtil;
-import org.distributed.shardingjh.util.OrderSignatureUtil;
+import org.distributed.shardingjh.util.SignatureUtil;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -67,7 +67,7 @@ public class OrderControllerMVCCConcurrencyTest {
      * */
     @Test
     public void testMVCCConflictOnConcurrentUpdate() throws Exception {
-        String bodyJson = OrderSignatureUtil.toCanonicalJson(initialOrder, objectMapper);
+        String bodyJson = SignatureUtil.toCanonicalJson(initialOrder, objectMapper);
         String signature = EncryptUtil.hmacSha256(bodyJson, SECRET_KEY);
         // Step 1: Save original order
         String savedJson = mockMvc.perform(post("/order/save")
@@ -81,8 +81,8 @@ public class OrderControllerMVCCConcurrencyTest {
         OrderTable savedOrder = objectMapper.convertValue(savedResponse.getData(), OrderTable.class);
 
         // Step 2: Make two copies
-        OrderTable updateA = objectMapper.readValue(OrderSignatureUtil.toCanonicalJson(savedOrder, objectMapper), OrderTable.class);
-        OrderTable updateB = objectMapper.readValue(OrderSignatureUtil.toCanonicalJson(savedOrder, objectMapper), OrderTable.class);
+        OrderTable updateA = objectMapper.readValue(SignatureUtil.toCanonicalJson(savedOrder, objectMapper), OrderTable.class);
+        OrderTable updateB = objectMapper.readValue(SignatureUtil.toCanonicalJson(savedOrder, objectMapper), OrderTable.class);
         // Modify the copies
         updateA.setPrice(111);
         updateB.setPrice(999);
@@ -110,7 +110,7 @@ public class OrderControllerMVCCConcurrencyTest {
     private String sendUpdate(OrderTable order) {
         try {
             // Generate signature for the update
-            String bodyJson = OrderSignatureUtil.toCanonicalJson(order, objectMapper);
+            String bodyJson = SignatureUtil.toCanonicalJson(order, objectMapper);
             String signature = EncryptUtil.hmacSha256(bodyJson, SECRET_KEY);
             return mockMvc.perform(post("/order/update")
                             .contentType(MediaType.APPLICATION_JSON)

@@ -5,7 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
 import org.distributed.shardingjh.repository.order.RequestOrder;
 import org.distributed.shardingjh.util.EncryptUtil;
-import org.distributed.shardingjh.util.OrderSignatureUtil;
+import org.distributed.shardingjh.util.SignatureUtil;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -51,7 +51,7 @@ public class OrderControllerSecurityTest {
     @Test
     public void testSaveOrder_withValidSignature_shouldReturnSuccess() throws Exception {
 
-        String bodyJson = OrderSignatureUtil.toCanonicalJson(initialOrder, objectMapper);
+        String bodyJson = SignatureUtil.toCanonicalJson(initialOrder, objectMapper);
         String signature = EncryptUtil.hmacSha256(bodyJson, SECRET_KEY);
 
         mockMvc.perform(MockMvcRequestBuilders.post("/order/save")
@@ -64,7 +64,7 @@ public class OrderControllerSecurityTest {
 
     @Test
     public void testDelete_withValidSignature_shouldReturnSuccess() throws Exception {
-        String bodyJson = OrderSignatureUtil.toCanonicalJson(initialOrder, objectMapper);
+        String bodyJson = SignatureUtil.toCanonicalJson(initialOrder, objectMapper);
         String saveSignature = EncryptUtil.hmacSha256(bodyJson, SECRET_KEY);
         String savedJson = mockMvc.perform(post("/order/save")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -74,7 +74,7 @@ public class OrderControllerSecurityTest {
                 .andReturn().getResponse().getContentAsString();
         JsonNode jsonNode = objectMapper.readTree(savedJson);
         JsonNode toDeleteJson = jsonNode.get("data");
-        String dataDeleteJson = OrderSignatureUtil.toCanonicalJson(toDeleteJson, objectMapper);;
+        String dataDeleteJson = SignatureUtil.toCanonicalJson(toDeleteJson, objectMapper);;
 
         String signature = EncryptUtil.hmacSha256(dataDeleteJson, SECRET_KEY);
         mockMvc.perform(MockMvcRequestBuilders.post("/order/delete")
@@ -87,7 +87,7 @@ public class OrderControllerSecurityTest {
 
     @Test
     public void testUpdate_withValidSignature_shouldReturnSuccess() throws Exception {
-        String bodyJson = OrderSignatureUtil.toCanonicalJson(initialOrder, objectMapper);
+        String bodyJson = SignatureUtil.toCanonicalJson(initialOrder, objectMapper);
         String saveSignature = EncryptUtil.hmacSha256(bodyJson, SECRET_KEY);
         String savedJson = mockMvc.perform(post("/order/save")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -98,7 +98,7 @@ public class OrderControllerSecurityTest {
         log.info("Saved JSON: {}", savedJson);
         JsonNode jsonNode = objectMapper.readTree(savedJson);
         JsonNode toUpdateJson = jsonNode.get("data");
-        String dataUpdateJson = OrderSignatureUtil.toCanonicalJson(toUpdateJson, objectMapper);
+        String dataUpdateJson = SignatureUtil.toCanonicalJson(toUpdateJson, objectMapper);
         log.info("Update JSON: {}", dataUpdateJson);
 
         String signature = EncryptUtil.hmacSha256(dataUpdateJson, SECRET_KEY);
@@ -136,7 +136,7 @@ public class OrderControllerSecurityTest {
     public void testGetOne_withValidSignature_shouldReturnSuccess() throws Exception {
         String orderId = initialOrder.getOrderId();
         // First save the order to ensure it exists
-        String bodyJson = OrderSignatureUtil.toCanonicalJson(initialOrder, objectMapper);
+        String bodyJson = SignatureUtil.toCanonicalJson(initialOrder, objectMapper);
         String saveSignature = EncryptUtil.hmacSha256(bodyJson, SECRET_KEY);
         String savedJson = mockMvc.perform(post("/order/save")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -159,7 +159,7 @@ public class OrderControllerSecurityTest {
     public void testHistory_withValidSignature_shouldReturnSuccess() throws Exception {
         String orderId = initialOrder.getOrderId();
         // First save the order to ensure it exists
-        String bodyJson = OrderSignatureUtil.toCanonicalJson(initialOrder, objectMapper);
+        String bodyJson = SignatureUtil.toCanonicalJson(initialOrder, objectMapper);
         String saveSignature = EncryptUtil.hmacSha256(bodyJson, SECRET_KEY);
         String savedJson = mockMvc.perform(post("/order/save")
                         .contentType(MediaType.APPLICATION_JSON)

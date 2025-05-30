@@ -6,7 +6,7 @@ import org.distributed.shardingjh.model.OrderKey;
 import org.distributed.shardingjh.model.OrderTable;
 import org.distributed.shardingjh.repository.order.RequestOrder;
 import org.distributed.shardingjh.util.EncryptUtil;
-import org.distributed.shardingjh.util.OrderSignatureUtil;
+import org.distributed.shardingjh.util.SignatureUtil;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -58,7 +58,7 @@ public class OrderRollBack {
     public void testRollbackOnUpdateFailure() throws Exception {
 
         String orderId = initialOrder.getOrderId();
-        String bodyJson = OrderSignatureUtil.toCanonicalJson(initialOrder, objectMapper);
+        String bodyJson = SignatureUtil.toCanonicalJson(initialOrder, objectMapper);
         String signature = EncryptUtil.hmacSha256(bodyJson, SECRET_KEY);
 
         mockMvc.perform(post("/order/save")
@@ -77,7 +77,7 @@ public class OrderRollBack {
 
         // Step 3: Trigger update with rollback
         try  {
-            String updateJson = OrderSignatureUtil.toCanonicalJson(update, objectMapper);
+            String updateJson = SignatureUtil.toCanonicalJson(update, objectMapper);
             String updateSignature = EncryptUtil.hmacSha256(updateJson, SECRET_KEY);
             mockMvc.perform(post("/order/updateAndFail")
                             .contentType(MediaType.APPLICATION_JSON)
