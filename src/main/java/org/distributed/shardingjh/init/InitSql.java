@@ -95,7 +95,7 @@ public class InitSql implements CommandLineRunner {
 
         // product table
         String createProductSql = "CREATE TABLE IF NOT EXISTS product (" +
-                "id INTEGER PRIMARY KEY, " +
+                "id varchar(255) PRIMARY KEY, " +
                 "name varchar(255) UNIQUE, " +
                 "price INTEGER " +
                 ");";
@@ -236,27 +236,27 @@ public class InitSql implements CommandLineRunner {
             // Insert sample products
             prod_stmt.executeUpdate("INSERT INTO product (id, name, price) " +
                     "VALUES ('01b2f99e-88d0-4b1a-90c9-f2f794223c8f','Laptop' , '1000')");
-            prod_stmt.executeUpdate("INSERT INTO product (name, price) " +
+            prod_stmt.executeUpdate("INSERT INTO product (id, name, price) " +
                     "VALUES ('72a063bc-f939-41bb-9597-4ff1069fc9c6','Smartphone' , '800')");
-            prod_stmt.executeUpdate("INSERT INTO product (name, price) " +
+            prod_stmt.executeUpdate("INSERT INTO product (id, name, price) " +
                     "VALUES ('d5a7e55a-6adc-40bf-8ff3-6e08eac7914f','Tablet' , '600')");
-            prod_stmt.executeUpdate("INSERT INTO product (name, price) " +
+            prod_stmt.executeUpdate("INSERT INTO product (id, name, price) " +
                     "VALUES ('d54485a9-70b4-47be-9b6b-7545c4bc74c5','Smartwatch' , '300')");
-            prod_stmt.executeUpdate("INSERT INTO product (name, price) " +
+            prod_stmt.executeUpdate("INSERT INTO product (id, name, price) " +
                     "VALUES ('52b2d1aa-2c6a-466f-bf29-ed8a06519ca4','Headphones' , '150')");
-            prod_stmt.executeUpdate("INSERT INTO product (name, price) " +
+            prod_stmt.executeUpdate("INSERT INTO product (id, name, price) " +
                     "VALUES ('74716f11-6a88-4ab9-b7b7-86181715811e','Bluetooth Speaker' , '100')");
-            prod_stmt.executeUpdate("INSERT INTO product (name, price) " +
+            prod_stmt.executeUpdate("INSERT INTO product (id, name, price) " +
                     "VALUES ('1a24ddd0-ec18-42f0-84ef-0f3929801cc2','Wireless Mouse' , '50')");
-            prod_stmt.executeUpdate("INSERT INTO product (name, price) " +
+            prod_stmt.executeUpdate("INSERT INTO product (id, name, price) " +
                     "VALUES ('bc2426cb-65d4-423b-a467-0f69994dc6c8','Keyboard' , '80')");
-            prod_stmt.executeUpdate("INSERT INTO product (name, price) " +
+            prod_stmt.executeUpdate("INSERT INTO product (id, name, price) " +
                     "VALUES ('3eaf6e55-c64b-4af4-80ef-7cd83931567e','Monitor' , '200')");
-            prod_stmt.executeUpdate("INSERT INTO product (name, price) " +
+            prod_stmt.executeUpdate("INSERT INTO product (id, name, price) " +
                     "VALUES ('8d0895df-12cc-43d1-b10c-e468afd3047a','Printer' , '250')");
-            prod_stmt.executeUpdate("INSERT INTO product (name, price) " +
+            prod_stmt.executeUpdate("INSERT INTO product (id, name, price) " +
                     "VALUES ('560b9180-c954-43ae-9889-670bec04dbbc','External Hard Drive' , '120')");
-            prod_stmt.executeUpdate("INSERT INTO product (name, price) " +
+            prod_stmt.executeUpdate("INSERT INTO product (id, name, price) " +
                     "VALUES ('438b4970-29a0-48da-88f8-4ec28b005113','USB Flash Drive' , '30')");
         }
         log.info("Database tables initialized successfully.");
