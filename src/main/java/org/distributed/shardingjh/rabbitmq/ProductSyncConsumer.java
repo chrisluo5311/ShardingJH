@@ -5,6 +5,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.distributed.shardingjh.controller.productcontroller.ProductRequest;
 import org.distributed.shardingjh.service.Impl.ProductServiceImpl;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
+import org.springframework.context.annotation.DependsOn;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -18,7 +19,7 @@ public class ProductSyncConsumer {
     ProductServiceImpl productService;
 
     @Transactional
-    @RabbitListener(queues = "${product.queue}")
+    @RabbitListener(queues = "${product.queue}", autoStartup = "false")
     public void receiveSync(Map<String, Object> msg) {
         log.info("Received product sync message: {}", msg);
         String op = (String) msg.get("op");

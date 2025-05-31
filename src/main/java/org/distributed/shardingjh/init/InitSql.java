@@ -1,8 +1,10 @@
 package org.distributed.shardingjh.init;
 
+import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.distributed.shardingjh.common.constant.ShardConst;
 import org.distributed.shardingjh.service.Impl.OrderIdGenerator;
+import org.springframework.amqp.rabbit.listener.RabbitListenerEndpointRegistry;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.CommandLineRunner;
@@ -35,6 +37,9 @@ import java.util.UUID;
 @Slf4j
 @Component
 public class InitSql implements CommandLineRunner {
+
+    @Resource
+    RabbitListenerEndpointRegistry rabbitListenerEndpointRegistry;
 
     private final DataSource shardCommon1;
     private final DataSource shardCommon2;
@@ -260,6 +265,7 @@ public class InitSql implements CommandLineRunner {
                     "VALUES ('438b4970-29a0-48da-88f8-4ec28b005113','USB Flash Drive' , '30')");
         }
         log.info("Database tables initialized successfully.");
+        rabbitListenerEndpointRegistry.start();
     }
 
     private boolean isResponsible(String key, TreeMap<Integer, String> serverUrls, String currentNodeUrl) {
