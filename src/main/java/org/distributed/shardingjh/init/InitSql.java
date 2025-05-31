@@ -234,14 +234,30 @@ public class InitSql implements CommandLineRunner {
             }
 
             // Insert sample products
-            String[] productNames = {"Laptop", "Smartphone", "Tablet", "Smartwatch", "Headphones",
-                                        "Camera", "Printer", "Monitor", "Keyboard", "Mouse",
-                                        "Speaker", "Router", "External Hard Drive", "USB Flash Drive", "Smart TV"};
-            int productCount = 30;
-            while (productCount-- > 0) {
-                prod_stmt.executeUpdate("INSERT INTO product (name, price) " +
-                        "VALUES ('"+ productNames[random.nextInt(productNames.length)] +"' , '"+ random.nextInt(1000)+10 +"')");
-            }
+            prod_stmt.executeUpdate("INSERT INTO product (name, price) " +
+                    "VALUES ('Laptop' , '1000')");
+            prod_stmt.executeUpdate("INSERT INTO product (name, price) " +
+                    "VALUES ('Smartphone' , '800')");
+            prod_stmt.executeUpdate("INSERT INTO product (name, price) " +
+                    "VALUES ('Tablet' , '600')");
+            prod_stmt.executeUpdate("INSERT INTO product (name, price) " +
+                    "VALUES ('Smartwatch' , '300')");
+            prod_stmt.executeUpdate("INSERT INTO product (name, price) " +
+                    "VALUES ('Headphones' , '150')");
+            prod_stmt.executeUpdate("INSERT INTO product (name, price) " +
+                    "VALUES ('Bluetooth Speaker' , '100')");
+            prod_stmt.executeUpdate("INSERT INTO product (name, price) " +
+                    "VALUES ('Wireless Mouse' , '50')");
+            prod_stmt.executeUpdate("INSERT INTO product (name, price) " +
+                    "VALUES ('Keyboard' , '80')");
+            prod_stmt.executeUpdate("INSERT INTO product (name, price) " +
+                    "VALUES ('Monitor' , '200')");
+            prod_stmt.executeUpdate("INSERT INTO product (name, price) " +
+                    "VALUES ('Printer' , '250')");
+            prod_stmt.executeUpdate("INSERT INTO product (name, price) " +
+                    "VALUES ('External Hard Drive' , '120')");
+            prod_stmt.executeUpdate("INSERT INTO product (name, price) " +
+                    "VALUES ('USB Flash Drive' , '30')");
         }
         log.info("Database tables initialized successfully.");
     }
