@@ -40,7 +40,7 @@ public class ProductController {
     }
 
     @GetMapping("/delete")
-    public MgrResponseDto<String> deleteProduct(@RequestParam Integer id) {
+    public MgrResponseDto<String> deleteProduct(@RequestParam String id) {
         if (!productService.deleteProduct(id)) {
             return MgrResponseDto.error(MgrResponseCode.PRODUCT_NOT_FOUND);
         }

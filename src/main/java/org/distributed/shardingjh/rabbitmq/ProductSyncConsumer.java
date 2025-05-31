@@ -21,7 +21,7 @@ public class ProductSyncConsumer {
     public void receiveSync(Map<String, Object> msg) {
         log.info("Received product sync message: {}", msg);
         String op = (String) msg.get("op");
-        Integer id = (Integer) msg.get("id");
+        String id = (String) msg.get("id");
         String name = (String) msg.get("name");
         Integer price = (Integer) msg.get("price");
 

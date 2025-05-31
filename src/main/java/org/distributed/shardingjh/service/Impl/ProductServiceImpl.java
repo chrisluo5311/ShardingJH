@@ -1,7 +1,6 @@
 package org.distributed.shardingjh.service.Impl;
 
 import jakarta.annotation.Resource;
-import org.distributed.shardingjh.controller.productcontroller.ProductRequest;
 import org.distributed.shardingjh.model.Product;
 import org.distributed.shardingjh.repository.product.ProductRepository;
 import org.distributed.shardingjh.service.ProductService;
@@ -20,6 +19,7 @@ public class ProductServiceImpl implements ProductService {
         Product product = getProduct(name);
         if (product == null) {
             product = new Product();
+            product.setId(java.util.UUID.randomUUID().toString());
         }
         product.setName(name);
         product.setPrice(price);
@@ -27,7 +27,7 @@ public class ProductServiceImpl implements ProductService {
     }
 
     @Override
-    public boolean deleteProduct(Integer id) {
+    public boolean deleteProduct(String id) {
         if (productRepository.existsById(id)) {
             productRepository.deleteById(id);
             return true;

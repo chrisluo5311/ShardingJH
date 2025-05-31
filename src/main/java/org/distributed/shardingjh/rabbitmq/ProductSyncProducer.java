@@ -24,7 +24,7 @@ public class ProductSyncProducer {
      * Fanout exchanges ignore the routing key completely, so routingKey is empty
      * Fanout broadcast every message to all queues bound to them
      * */
-    public void publishProductUpdate(String op, Integer id, String name, Integer price) {
+    public void publishProductUpdate(String op, String id, String name, Integer price) {
         Map<String, Object> msg = new HashMap<>();
         msg.put("op", op);
         msg.put("id", id);
