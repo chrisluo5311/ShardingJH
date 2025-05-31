@@ -96,7 +96,7 @@ public class InitSql implements CommandLineRunner {
         // product table
         String createProductSql = "CREATE TABLE IF NOT EXISTS product (" +
                 "id varchar(255) PRIMARY KEY, " +
-                "name varchar(255) UNIQUE, " +
+                "name varchar(255), " +
                 "price INTEGER " +
                 ");";
 
