@@ -50,6 +50,16 @@ jobs:
             sudo yum -y update
             sudo yum -y install sqlite-devel
             sudo yum -y install java-17-amazon-corretto
-            cd ${{ secrets.TARGET_DIR }}
+            cd ${{ secrets.TARGET_DIR }}/src/main/resources
+            RABBIT_PASS="${{ secrets.RABBITMQ_PASSWORD }}"
+            # Edit or append the password property in application.properties
+            if grep -q "^spring.rabbitmq.password=" application.properties; then
+                # Replace existing line
+                sed -i "s/^spring.rabbitmq.password=.*/spring.rabbitmq.password=${RABBIT_PASS}/" application.properties
+            else
+              # Append new line
+              echo "spring.rabbitmq.password=${RABBIT_PASS}" >> application.properties
+            fi
+            cd ../../../
             chmod +x run-app.sh
             ./run-app.sh ${{ matrix.PROFILE }}
