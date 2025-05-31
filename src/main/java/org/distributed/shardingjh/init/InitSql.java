@@ -41,6 +41,7 @@ public class InitSql implements CommandLineRunner {
     private final DataSource shardOrder2024;
     private final DataSource shardOrder2025;
     private final DataSource shardOrderOld;
+    private final DataSource productDatabase;
     private final String CURRENT_NODE_URL;
 
     public InitSql(@Qualifier("shardCommon1DataSource") DataSource shardCommon1,
@@ -48,12 +49,14 @@ public class InitSql implements CommandLineRunner {
                     @Qualifier("shardOrder2024DataSource") DataSource shardOrder2024,
                     @Qualifier("shardOrder2025DataSource") DataSource shardOrder2025,
                     @Qualifier("shardOrderOldDataSource") DataSource shardOrderOld,
+                    @Qualifier("productDataSource") DataSource productDatabase,
                     @Value("${router.server-url}") String CURRENT_NODE_URL) {
         this.shardCommon1 = shardCommon1;
         this.shardCommon2 = shardCommon2;
         this.shardOrder2024 = shardOrder2024;
         this.shardOrder2025 = shardOrder2025;
         this.shardOrderOld = shardOrderOld;
+        this.productDatabase = productDatabase;
         this.CURRENT_NODE_URL = CURRENT_NODE_URL;
     }
 
@@ -90,6 +93,13 @@ public class InitSql implements CommandLineRunner {
                 "PRIMARY KEY (order_id, version)" +
                 ");";
 
+        // product table
+        String createProductSql = "CREATE TABLE IF NOT EXISTS product (" +
+                "id INTEGER PRIMARY KEY AUTOINCREMENT, " +
+                "name varchar(255), " +
+                "price INTEGER " +
+                ");";
+
         // Get connections to the databases
         try (Connection conn = shardCommon1.getConnection();
                 Statement stmt = conn.createStatement();
@@ -100,7 +110,9 @@ public class InitSql implements CommandLineRunner {
                 Connection ord_conn2 = shardOrder2025.getConnection();
                 Statement ord_stmt2 = ord_conn2.createStatement();
                 Connection ord_conn3 = shardOrderOld.getConnection();
-                Statement ord_stmt3 = ord_conn3.createStatement()) {
+                Statement ord_stmt3 = ord_conn3.createStatement();
+                Connection prod_conn = productDatabase.getConnection();
+                Statement prod_stmt = prod_conn.createStatement()) {
 
             // ✅ Enable WAL mode
             stmt.execute("PRAGMA journal_mode=WAL");
@@ -108,6 +120,7 @@ public class InitSql implements CommandLineRunner {
             ord_stmt.execute("PRAGMA journal_mode=WAL");
             ord_stmt2.execute("PRAGMA journal_mode=WAL");
             ord_stmt3.execute("PRAGMA journal_mode=WAL");
+            prod_stmt.execute("PRAGMA journal_mode=WAL");
 
             // Create tables in shard_common_1
             stmt.execute("DROP TABLE IF EXISTS member");
@@ -133,6 +146,11 @@ public class InitSql implements CommandLineRunner {
             ord_stmt3.execute("DROP TABLE IF EXISTS order_table");
             ord_stmt3.execute(createOrderSql);
             ord_stmt3.executeUpdate("DELETE FROM order_table");
+
+            // Create tables in product database
+            prod_stmt.execute("DROP TABLE IF EXISTS product");
+            prod_stmt.execute(createProductSql);
+            prod_stmt.executeUpdate("DELETE FROM product");
 
             int memberInserted1 = 0;
             int memberInserted2 = 0;
@@ -213,6 +231,16 @@ public class InitSql implements CommandLineRunner {
                             memberId + "', "+randomPrice+", 1, null, 0)");
                     order2023Inserted++;
                 }
+            }
+
+            // Insert sample products
+            String[] productNames = {"Laptop", "Smartphone", "Tablet", "Smartwatch", "Headphones",
+                                        "Camera", "Printer", "Monitor", "Keyboard", "Mouse",
+                                        "Speaker", "Router", "External Hard Drive", "USB Flash Drive", "Smart TV"};
+            int productCount = 30;
+            while (productCount-- > 0) {
+                prod_stmt.executeUpdate("INSERT INTO product (name, price) " +
+                        "VALUES ('"+ productNames[random.nextInt(productNames.length)] +"' , '"+ random.nextInt(1000)+10 +"')");
             }
         }
         log.info("Database tables initialized successfully.");

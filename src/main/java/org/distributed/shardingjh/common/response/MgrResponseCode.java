@@ -34,6 +34,8 @@ public enum MgrResponseCode {
     DB_FAIL("0401", "Database operation failed"),
     DB_CONFLICT("0402", "Database conflict"),
 
+    PRODUCT_NOT_FOUND("0501", "Product not found"),
+
     UNKNOWN_ERROR("9999", "System error");
 
     private String code;

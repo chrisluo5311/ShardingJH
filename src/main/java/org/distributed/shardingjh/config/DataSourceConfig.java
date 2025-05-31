@@ -49,4 +49,10 @@ public class DataSourceConfig {
     public DataSource shardOrderOldDataSource() {
         return DataSourceBuilder.create().build();
     }
+
+    @Bean(name = "productDataSource")
+    @ConfigurationProperties(prefix = "spring.datasource.product")
+    public DataSource productDataSource() {
+        return DataSourceBuilder.create().build();
+    }
 }
