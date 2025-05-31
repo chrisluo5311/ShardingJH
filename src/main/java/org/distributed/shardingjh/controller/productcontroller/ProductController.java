@@ -31,7 +31,7 @@ public class ProductController {
 
     @RequestMapping(value = "/update", method = RequestMethod.POST)
     public MgrResponseDto<Product> updateProduct(@RequestBody ProductRequest productRequest) {
-        if (productService.getProduct(productRequest.getName()) == null) {
+        if (productService.getProduct(productRequest.getId()) == null) {
             return MgrResponseDto.error(MgrResponseCode.PRODUCT_NOT_FOUND);
         }
         Product product = productService.addOrUpdateProduct(productRequest);
