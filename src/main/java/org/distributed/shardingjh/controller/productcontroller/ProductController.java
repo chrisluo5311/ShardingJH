@@ -24,7 +24,7 @@ public class ProductController {
 
     @RequestMapping(value = "/add", method = RequestMethod.POST)
     public MgrResponseDto<Product> addProduct(@RequestBody ProductRequest productRequest) {
-        Product product = productService.addOrUpdateProduct(productRequest.getName(), productRequest.getPrice());
+        Product product = productService.addOrUpdateProduct(productRequest);
         productSyncProducer.publishProductUpdate("add", product.getId(), product.getName(), product.getPrice());
         return MgrResponseDto.success(product);
     }
@@ -34,7 +34,7 @@ public class ProductController {
         if (productService.getProduct(productRequest.getName()) == null) {
             return MgrResponseDto.error(MgrResponseCode.PRODUCT_NOT_FOUND);
         }
-        Product product = productService.addOrUpdateProduct(productRequest.getName(), productRequest.getPrice());
+        Product product = productService.addOrUpdateProduct(productRequest);
         productSyncProducer.publishProductUpdate("update", product.getId(), product.getName(), product.getPrice());
         return MgrResponseDto.success(product);
     }

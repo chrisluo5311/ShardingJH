@@ -2,6 +2,7 @@ package org.distributed.shardingjh.rabbitmq;
 
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
+import org.distributed.shardingjh.controller.productcontroller.ProductRequest;
 import org.distributed.shardingjh.service.Impl.ProductServiceImpl;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
 import org.springframework.stereotype.Service;
@@ -26,11 +27,15 @@ public class ProductSyncConsumer {
         Integer price = (Integer) msg.get("price");
 
         if ("add".equals(op) || "update".equals(op)) {
-            productService.addOrUpdateProduct(name, price);
-            log.info("Product added/updated (DB): {} - {}", id, name);
+            ProductRequest productRequest = new ProductRequest();
+            productRequest.setId(id);
+            productRequest.setName(name);
+            productRequest.setPrice(price);
+            productService.addOrUpdateProduct(productRequest);
+            log.info("[ProductSyncConsumer] Product added/updated (DB): {} - {}", id, name);
         } else if ("delete".equals(op)) {
             productService.deleteProduct(id);
-            log.info("Product deleted (DB): {}", id);
+            log.info("[ProductSyncConsumer] Product deleted (DB): {}", id);
         }
     }
 }

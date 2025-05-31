@@ -31,6 +31,6 @@ public class ProductSyncProducer {
         msg.put("name", name);
         msg.put("price", price);
         rabbitTemplate.convertAndSend(productExchange, "", msg);
-        log.info("Published product sync message: {}", msg);
+        log.info("[ProductSyncProducer] Published product sync message: {}", msg);
     }
 }

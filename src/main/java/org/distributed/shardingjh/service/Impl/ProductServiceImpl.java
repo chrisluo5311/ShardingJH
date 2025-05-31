@@ -1,6 +1,8 @@
 package org.distributed.shardingjh.service.Impl;
 
 import jakarta.annotation.Resource;
+import lombok.extern.slf4j.Slf4j;
+import org.distributed.shardingjh.controller.productcontroller.ProductRequest;
 import org.distributed.shardingjh.model.Product;
 import org.distributed.shardingjh.repository.product.ProductRepository;
 import org.distributed.shardingjh.service.ProductService;
@@ -8,6 +10,7 @@ import org.springframework.stereotype.Service;
 
 import java.util.List;
 
+@Slf4j
 @Service
 public class ProductServiceImpl implements ProductService {
 
@@ -15,14 +18,15 @@ public class ProductServiceImpl implements ProductService {
     ProductRepository productRepository;
 
     @Override
-    public Product addOrUpdateProduct(String name, Integer price) {
-        Product product = getProduct(name);
+    public Product addOrUpdateProduct(ProductRequest productRequest) {
+        Product product = getProduct(productRequest.getId());
         if (product == null) {
+            log.info("Creating new product with ID: {}", productRequest.getId());
             product = new Product();
-            product.setId(java.util.UUID.randomUUID().toString());
+            product.setId(productRequest.getId());
         }
-        product.setName(name);
-        product.setPrice(price);
+        product.setName(productRequest.getName());
+        product.setPrice(productRequest.getPrice());
         return productRepository.save(product);
     }
 
@@ -36,8 +40,8 @@ public class ProductServiceImpl implements ProductService {
     }
 
     @Override
-    public Product getProduct(String name) {
-        return productRepository.findByName(name);
+    public Product getProduct(String id) {
+        return productRepository.findById(id).orElse(null);
     }
 
     @Override
