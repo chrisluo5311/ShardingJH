@@ -40,9 +40,6 @@ public class OrderServiceImpl implements OrderService {
     @Resource
     private OrderRepository orderRepository;
 
-    private static final AtomicBoolean firstFailureSimulated = new AtomicBoolean(false);
-
-
     // EntityManager is used to interact with the persistence context (i.e., to perform database operations like queries, inserts, updates, and deletes).
     // Each EntityManager instance represents a single unit of work and should be closed after use to release resources.
     @PersistenceContext(unitName = "shardingOrder")
