@@ -73,10 +73,12 @@ public class InitialGossipStarter implements ApplicationRunner {
         // Other nodes may have removed us from their finger tables due to previous failures
         log.info("[sendInitialGossip] Sending gossip to announce node {} (hash: {}) is online", CURRENT_NODE_URL, currentNodeHash);
         
-        // Create gossip message
+        // Create gossip message with unique identifier
         GossipMsg gossipMsg = GossipMsg.builder()
                 .msgType(GossipMsg.Type.HOST_ADD)
                 .msgContent(fingerTable.finger.toString())
+                .senderId(CURRENT_NODE_URL)
+                .timestamp(String.valueOf(System.currentTimeMillis()))
                 .build();
 
         // Send gossip message to 2 random selections of neighbors

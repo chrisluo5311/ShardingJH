@@ -190,10 +190,12 @@ public class hearBeatSender {
      */
     private void sendHostDownGossip(Integer failedNodeHash) {
         try {
-            // Create HOST_DOWN gossip message
+            // Create HOST_DOWN gossip message with unique identifier
             GossipMsg gossipMsg = GossipMsg.builder()
                     .msgType(GossipMsg.Type.HOST_DOWN)
                     .msgContent(String.valueOf(failedNodeHash))
+                    .senderId(CURRENT_NODE_URL)
+                    .timestamp(String.valueOf(System.currentTimeMillis()))
                     .build();
             
             // Send to random neighbors
