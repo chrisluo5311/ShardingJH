@@ -4,7 +4,8 @@ import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.boot.context.properties.ConfigurationPropertiesScan;
 import org.springframework.context.annotation.PropertySource;
-import org.springframework.context.annotation.PropertySources;
+import org.springframework.scheduling.annotation.EnableAsync;
+import org.springframework.scheduling.annotation.EnableScheduling;
 
 @ConfigurationPropertiesScan
 //@PropertySources({
@@ -14,6 +15,8 @@ import org.springframework.context.annotation.PropertySources;
 //    @PropertySource("classpath:application-server3.properties"),
 //})
 @PropertySource("classpath:shard.properties")
+@EnableScheduling
+@EnableAsync
 @SpringBootApplication
 public class ShardingJhApplication {
 
