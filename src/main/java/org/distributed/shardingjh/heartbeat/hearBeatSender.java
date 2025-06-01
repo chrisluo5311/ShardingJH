@@ -1,5 +1,6 @@
 package org.distributed.shardingjh.heartbeat;
 
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
@@ -10,6 +11,7 @@ import org.distributed.shardingjh.gossip.GossipMsg;
 import org.distributed.shardingjh.gossip.GossipService;
 import org.distributed.shardingjh.p2p.FingerTable;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.web.client.RestTemplateBuilder;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
@@ -21,6 +23,7 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestTemplate;
 
+import jakarta.annotation.PostConstruct;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 
@@ -41,7 +44,27 @@ public class hearBeatSender {
     @Value("${router.server-url}")
     private String CURRENT_NODE_URL;
 
-    private final RestTemplate restTemplate = new RestTemplate();
+    @Value("${heartbeat.timeout:5000}")
+    private int heartbeatTimeoutMs;
+
+    @Value("${heartbeat.connect-timeout:3000}")
+    private int connectTimeoutMs;
+
+    private RestTemplate restTemplate;
+
+    /**
+     * Initialize RestTemplate with timeout configuration
+     */
+    @PostConstruct
+    public void initRestTemplate() {
+        this.restTemplate = new RestTemplateBuilder()
+                .setConnectTimeout(Duration.ofMillis(connectTimeoutMs))
+                .setReadTimeout(Duration.ofMillis(heartbeatTimeoutMs))
+                .build();
+        
+        log.info("[HeartBeat] RestTemplate initialized with connect timeout: {}ms, read timeout: {}ms", 
+                connectTimeoutMs, heartbeatTimeoutMs);
+    }
 
     /**
      * Scheduled heartbeat sending to all finger table nodes
