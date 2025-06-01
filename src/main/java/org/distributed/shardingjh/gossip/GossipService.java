@@ -1,17 +1,16 @@
 package org.distributed.shardingjh.gossip;
 
-import java.net.DatagramPacket;
-import java.net.DatagramSocket;
-import java.net.InetAddress;
-import java.nio.charset.StandardCharsets;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 
-import lombok.extern.slf4j.Slf4j;
 import org.distributed.shardingjh.p2p.FingerTable;
-import jakarta.annotation.Resource;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
+
+import jakarta.annotation.Resource;
+import lombok.extern.slf4j.Slf4j;
 
 @Slf4j
 @Service
@@ -103,29 +102,39 @@ public class GossipService {
             return;
         }
 
-        // Randomly select 2 neighbors
-        Collections.shuffle(neighbors);
-        int pickCount = Math.min(2, neighbors.size());
-        Set<String> uniqueNeighbors = new HashSet<>();
-
-        while (pickCount > 0) {
-            String neighborUrl = neighbors.get(new Random().nextInt(neighbors.size()));
+        // Filter out current node from neighbors first
+        List<String> validNeighbors = new ArrayList<>();
+        String currentIp = getCurrentIp();
+        
+        for (String neighborUrl : neighbors) {
             String[] partsNeighbor = neighborUrl.split(":");
             String neighborIp = partsNeighbor[1].replace("//", "");
-//            int port = Integer.parseInt(partsNeighbor[2]);
-            log.info("[GossipService] Sending gossip message to neighbor: {}", neighborIp);
-            if (!neighborIp.equals(getCurrentIp()) && !uniqueNeighbors.contains(neighborUrl)) {
-                gossipSender.sendGossip(gossipMsg, neighborIp, PORT);
-                uniqueNeighbors.add(neighborUrl);
-                pickCount--;
+            if (!neighborIp.equals(currentIp)) {
+                validNeighbors.add(neighborUrl);
             }
+        }
+        
+        if (validNeighbors.isEmpty()) {
+            log.warn("[GossipService] No valid neighbors to send gossip message to (all are current node).");
+            return;
+        }
 
-            // For testing purposes
-//            if (port == 8081) {
-//                gossipSender.sendGossip(gossipMsg, neighborIp, 9000);
-//                uniqueNeighbors.add(neighborUrl);
-//                pickCount--;
-//            }
+        // Randomly select up to 2 unique neighbors
+        Collections.shuffle(validNeighbors);
+        int pickCount = Math.min(2, validNeighbors.size());
+        
+        for (int i = 0; i < pickCount; i++) {
+            String neighborUrl = validNeighbors.get(i);
+            String[] partsNeighbor = neighborUrl.split(":");
+            String neighborIp = partsNeighbor[1].replace("//", "");
+            
+            log.info("[GossipService] Sending gossip message to neighbor: {}", neighborIp);
+            try {
+                gossipSender.sendGossip(gossipMsg, neighborIp, PORT);
+                log.debug("[GossipService] Successfully sent gossip message to: {}", neighborIp);
+            } catch (Exception e) {
+                log.error("[GossipService] Failed to send gossip message to {}: {}", neighborIp, e.getMessage());
+            }
         }
     }
 
