@@ -1,14 +1,16 @@
 package org.distributed.shardingjh.gossip;
 
-import jakarta.annotation.Resource;
-import lombok.extern.slf4j.Slf4j;
+import java.util.ArrayList;
+
+import org.distributed.shardingjh.common.constant.ShardConst;
 import org.distributed.shardingjh.p2p.FingerTable;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
 import org.springframework.stereotype.Component;
 
-import java.util.*;
+import jakarta.annotation.Resource;
+import lombok.extern.slf4j.Slf4j;
 
 @Slf4j
 @Component
@@ -20,6 +22,9 @@ public class InitialGossipStarter implements ApplicationRunner {
     @Value("${router.server-url}")
     private String CURRENT_NODE_URL;
 
+    @Value("${finger.entries}")
+    private String entries;
+
     @Resource
     FingerTable fingerTable;
 
@@ -28,7 +33,7 @@ public class InitialGossipStarter implements ApplicationRunner {
      * Steps:
      * 1. Check local finger table
      * 2. If current node is not in the finger table
-     * 3. Add current node to the finger table
+     * 3. Add current node to the finger table with its correct hash from configuration or calculated hash
      * 4. Send gossip message to 2 random nodes in the finger table (except itself)
      *
      * */
@@ -46,9 +51,19 @@ public class InitialGossipStarter implements ApplicationRunner {
 
         if (!isCurrentNodeInFingerTable) {
             log.info("[sendInitialGossip] Current node {} is not in the finger table. Adding to finger table and sending Gossip", CURRENT_NODE_URL);
-            // Add current node to finger table
-            int NEW_NODE_HASH_KEY = 224;
-            fingerTable.finger.put(NEW_NODE_HASH_KEY, CURRENT_NODE_URL);
+            
+            // Find the correct hash for current node from configuration
+            Integer currentNodeHash = findCurrentNodeHashFromConfig();
+            if (currentNodeHash != null) {
+                fingerTable.finger.put(currentNodeHash, CURRENT_NODE_URL);
+                log.info("[sendInitialGossip] Added current node with hash {} from configuration", currentNodeHash);
+            } else {
+                // Calculate hash dynamically based on node URL
+                int calculatedHash = Math.abs(CURRENT_NODE_URL.hashCode()) % ShardConst.FINGER_MAX_RANGE;
+                fingerTable.finger.put(calculatedHash, CURRENT_NODE_URL);
+                log.info("[sendInitialGossip] Could not find current node in configuration, using calculated hash {} for node {}", calculatedHash, CURRENT_NODE_URL);
+            }
+            
             // Create gossip message
             GossipMsg gossipMsg = GossipMsg.builder()
                     .msgType(GossipMsg.Type.HOST_ADD)
@@ -62,5 +77,19 @@ public class InitialGossipStarter implements ApplicationRunner {
                 gossipService.randomSendGossip(gossipMsg, new ArrayList<>(fingerTable.finger.values()));
             }
         }
+    }
+    
+    /**
+     * Find the hash key for current node from finger.entries configuration
+     * @return Hash key or null if not found
+     */
+    private Integer findCurrentNodeHashFromConfig() {
+        for (String entry : entries.split(",")) {
+            String[] parts = entry.split("=");
+            if (parts.length == 2 && parts[1].equals(CURRENT_NODE_URL)) {
+                return Integer.parseInt(parts[0]);
+            }
+        }
+        return null;
     }
 }

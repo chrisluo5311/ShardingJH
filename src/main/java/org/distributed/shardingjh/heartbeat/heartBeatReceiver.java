@@ -99,6 +99,9 @@ public class heartBeatReceiver {
      */
     @Scheduled(fixedRate = 180000) // 3 minutes
     public void cleanupExpiredHeartbeats() {
+        log.info("[HeartBeat] Starting cleanup - Current finger table: {}", fingerTable.finger);
+        log.info("[HeartBeat] Current heartbeat records: {}", nodeLastHeartbeat);
+        
         LocalDateTime now = LocalDateTime.now();
         int removedCount = 0;
         
@@ -168,11 +171,19 @@ public class heartBeatReceiver {
      * @return Hash key or null if not found
      */
     private Integer findHashByNodeUrl(String nodeUrl) {
+        log.debug("[HeartBeat] Looking for hash of failed node: '{}' in finger table", nodeUrl);
+        log.debug("[HeartBeat] Current finger table entries: {}", fingerTable.finger);
+        
         for (Map.Entry<Integer, String> entry : fingerTable.finger.entrySet()) {
+            log.debug("[HeartBeat] Comparing '{}' with finger table entry: '{}' -> '{}'", 
+                    nodeUrl, entry.getKey(), entry.getValue());
             if (entry.getValue().equals(nodeUrl)) {
+                log.info("[HeartBeat] Found matching hash: {} for node: {}", entry.getKey(), nodeUrl);
                 return entry.getKey();
             }
         }
+        log.warn("[HeartBeat] No matching hash found for node: '{}' in finger table with {} entries", 
+                nodeUrl, fingerTable.finger.size());
         return null;
     }
 

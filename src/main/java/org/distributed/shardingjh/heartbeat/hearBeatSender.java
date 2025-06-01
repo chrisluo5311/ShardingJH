@@ -1,6 +1,5 @@
 package org.distributed.shardingjh.heartbeat;
 
-import java.time.Duration;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
@@ -18,6 +17,7 @@ import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
@@ -57,9 +57,12 @@ public class hearBeatSender {
      */
     @PostConstruct
     public void initRestTemplate() {
+        SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
+        factory.setConnectTimeout(connectTimeoutMs);
+        factory.setReadTimeout(heartbeatTimeoutMs);
+        
         this.restTemplate = new RestTemplateBuilder()
-                .setConnectTimeout(Duration.ofMillis(connectTimeoutMs))
-                .setReadTimeout(Duration.ofMillis(heartbeatTimeoutMs))
+                .requestFactory(() -> factory)
                 .build();
         
         log.info("[HeartBeat] RestTemplate initialized with connect timeout: {}ms, read timeout: {}ms", 
