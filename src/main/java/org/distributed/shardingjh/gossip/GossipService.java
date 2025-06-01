@@ -68,12 +68,12 @@ public class GossipService {
                     String removedUrl = fingerTable.finger.remove(hash);
                     if (removedUrl != null) {
                         log.info("[GossipService] Removed host from finger table: {}={}", hash, removedUrl);
-                        // Propagate the updated finger table
+                        // Propagate with original sender info to maintain proper duplicate detection
                         gossipMsg = GossipMsg.builder()
                                             .msgType(GossipMsg.Type.HOST_DOWN)
                                             .msgContent(fingerTable.finger.toString())
-                                            .senderId(CURRENT_NODE_URL)
-                                            .timestamp(String.valueOf(System.currentTimeMillis()))
+                                            .senderId(message.getSenderId())  // Keep original sender
+                                            .timestamp(message.getTimestamp())  // Keep original timestamp
                                             .build();
                     } else {
                         log.info("[GossipService] Host {} was not in finger table, no changes made", hash);
@@ -103,19 +103,18 @@ public class GossipService {
                         }
                     }
                     
-                    // Always propagate HOST_ADD messages (even if no local changes)
-                    // This ensures network-wide propagation of revival messages
-                    gossipMsg = GossipMsg.builder()
-                                        .msgType(GossipMsg.Type.HOST_ADD)
-                                        .msgContent(fingerTable.finger.toString())
-                                        .senderId(CURRENT_NODE_URL)
-                                        .timestamp(String.valueOf(System.currentTimeMillis()))
-                                        .build();
-                    
+                    // Only propagate if we actually made changes to our finger table
                     if (addedAnyNode) {
+                        // Propagate with original sender info to maintain proper duplicate detection
+                        gossipMsg = GossipMsg.builder()
+                                            .msgType(GossipMsg.Type.HOST_ADD)
+                                            .msgContent(fingerTable.finger.toString())
+                                            .senderId(message.getSenderId())  // Keep original sender
+                                            .timestamp(message.getTimestamp())  // Keep original timestamp
+                                            .build();
                         log.info("[GossipService] Made changes to finger table, propagating: {}", fingerTable.finger);
                     } else {
-                        log.info("[GossipService] No local changes but still propagating HOST_ADD for network consistency");
+                        log.info("[GossipService] No changes to finger table, not propagating to avoid gossip storm");
                     }
                     }
                     break;
