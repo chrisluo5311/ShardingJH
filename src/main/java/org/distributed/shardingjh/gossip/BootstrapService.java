@@ -195,4 +195,21 @@ public class BootstrapService {
     public int getBootstrapNodeCount() {
         return bootstrapNodes.size();
     }
+    
+    /**
+     * Get configured entries from finger.entries
+     * @return List of configuration entries (format: "hash=url")
+     */
+    public List<String> getConfiguredEntries() {
+        List<String> entries = new ArrayList<>();
+        if (this.entries != null && !this.entries.trim().isEmpty()) {
+            String[] entryArray = this.entries.split(",");
+            for (String entry : entryArray) {
+                if (entry != null && entry.trim().contains("=")) {
+                    entries.add(entry.trim());
+                }
+            }
+        }
+        return entries;
+    }
 } 

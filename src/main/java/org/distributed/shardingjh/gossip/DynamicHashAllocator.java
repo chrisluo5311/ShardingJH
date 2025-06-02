@@ -2,6 +2,7 @@ package org.distributed.shardingjh.gossip;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -142,12 +143,24 @@ public class DynamicHashAllocator {
                        sortedHashes.get(i + 1) : 
                        (sortedHashes.get(0) + ShardConst.FINGER_MAX_RANGE);
             
-            int gap = (next - current + ShardConst.FINGER_MAX_RANGE) % ShardConst.FINGER_MAX_RANGE;
+            int gap;
+            if (i + 1 < sortedHashes.size()) {
+                // Normal gap between adjacent nodes
+                gap = next - current;
+            } else {
+                // Wrap-around gap from last node to first node
+                gap = (ShardConst.FINGER_MAX_RANGE - current) + sortedHashes.get(0);
+            }
             
             if (gap > maxGap && gap > 1) { // Ensure gap is greater than 1
                 maxGap = gap;
                 // Select midpoint of the gap
-                bestPosition = (current + gap / 2) % ShardConst.FINGER_MAX_RANGE;
+                if (i + 1 < sortedHashes.size()) {
+                    bestPosition = current + gap / 2;
+                } else {
+                    // Handle wrap-around case
+                    bestPosition = (current + gap / 2) % ShardConst.FINGER_MAX_RANGE;
+                }
             }
         }
         
@@ -164,14 +177,46 @@ public class DynamicHashAllocator {
      * Linear probing to find available hash position
      */
     private Integer findAvailableHashLinear(Map<Integer, String> currentTable) {
+        return findAvailableHashLinearExcluding(currentTable, new HashSet<>());
+    }
+    
+    /**
+     * Linear probing to find available hash position, excluding specified hashes
+     * @param currentTable Current finger table
+     * @param excludedHashes Hashes to exclude from consideration
+     * @return Available hash or null if none found
+     */
+    private Integer findAvailableHashLinearExcluding(Map<Integer, String> currentTable, Set<Integer> excludedHashes) {
+        // Also exclude hashes from configuration to avoid conflicts
+        Set<Integer> allExcluded = new HashSet<>(excludedHashes);
+        allExcluded.addAll(currentTable.keySet());
+        
+        // Parse finger.entries configuration to exclude configured hashes
+        try {
+            for (String entry : bootstrapService.getConfiguredEntries()) {
+                String[] parts = entry.split("=");
+                if (parts.length == 2) {
+                    Integer configHash = Integer.parseInt(parts[0]);
+                    allExcluded.add(configHash);
+                    log.debug("[findAvailableHashLinearExcluding] Excluding configured hash: {}", configHash);
+                }
+            }
+        } catch (Exception e) {
+            log.warn("[findAvailableHashLinearExcluding] Failed to parse configuration: {}", e.getMessage());
+        }
+        
         int start = Math.abs(CURRENT_NODE_URL.hashCode()) % ShardConst.FINGER_MAX_RANGE;
         for (int i = 0; i < ShardConst.FINGER_MAX_RANGE; i++) {
             int candidate = (start + i) % ShardConst.FINGER_MAX_RANGE;
-            if (!currentTable.containsKey(candidate)) {
+            if (!allExcluded.contains(candidate)) {
+                log.info("[findAvailableHashLinearExcluding] Found available hash {} after {} attempts (excluded: {})", 
+                        candidate, i, allExcluded.size());
                 return candidate;
             }
         }
-        throw new RuntimeException("No available hash position found in finger table");
+        log.error("[findAvailableHashLinearExcluding] No available hash found after {} attempts, excluded {} hashes", 
+                ShardConst.FINGER_MAX_RANGE, allExcluded.size());
+        return null;
     }
     
     /**
@@ -232,17 +277,39 @@ public class DynamicHashAllocator {
         Set<String> confirmations = proposalAcknowledgments.get(requestId);
         int totalNodes = allNodes.size();
         int confirmationCount = confirmations != null ? confirmations.size() : 0;
-        int majorityThreshold = (totalNodes / 2) + 1; // Majority
+        
+        // Handle single-node network case
+        int majorityThreshold;
+        if (totalNodes == 0) {
+            // First node in network - no confirmations needed
+            majorityThreshold = 0;
+            log.info("[DynamicHashAllocator] First node in network, no confirmation needed");
+        } else {
+            majorityThreshold = (totalNodes / 2) + 1; // Majority for multi-node network
+        }
         
         log.info("[DynamicHashAllocator] Confirmation statistics: {}/{} nodes confirmed, need: {}", 
                 confirmationCount, totalNodes, majorityThreshold);
         
-        // Check if majority confirmation is obtained
+        // Check if sufficient confirmation is obtained
         if (confirmationCount < majorityThreshold) {
-            log.warn("[DynamicHashAllocator] Not enough confirmation ({}/{}), cancel hash allocation", 
+            log.warn("[DynamicHashAllocator] ❌ INSUFFICIENT CONFIRMATION ({}/{}), STARTING RETRY PROCESS", 
                     confirmationCount, majorityThreshold);
             cleanup(requestId, proposedHash);
-            return findAvailableHashLinear(fingerTable.finger); // Re-select
+            
+            // Remove the failed hash from consideration to avoid retry loops
+            Set<Integer> excludedHashes = new HashSet<>();
+            excludedHashes.add(proposedHash);
+            Integer retryHash = findAvailableHashLinearExcluding(fingerTable.finger, excludedHashes);
+            
+            if (retryHash != null) {
+                log.info("[DynamicHashAllocator] 🔄 RETRYING HASH ALLOCATION with different hash: {} (excluded: {})", 
+                        retryHash, proposedHash);
+                return requestHashAllocation(retryHash);
+            } else {
+                log.error("[DynamicHashAllocator] ❌ RETRY FAILED: Unable to find alternative hash after confirmation failure");
+                throw new RuntimeException("Unable to find alternative hash after confirmation failure");
+            }
         }
         
         // Again check conflict (Possible conflict at higher priority request during waiting period)
@@ -251,7 +318,18 @@ public class DynamicHashAllocator {
             log.warn("[DynamicHashAllocator] Detected priority conflict during waiting period, yield to: {}", 
                     currentReservation.getNodeUrl());
             cleanup(requestId, proposedHash);
-            return findAvailableHashLinear(fingerTable.finger);
+            
+            // Use excluding logic to avoid selecting the same conflicted hash
+            Set<Integer> excludedHashes = new HashSet<>();
+            excludedHashes.add(proposedHash);
+            Integer fallbackHash = findAvailableHashLinearExcluding(fingerTable.finger, excludedHashes);
+            
+            if (fallbackHash != null) {
+                log.info("[DynamicHashAllocator] Using fallback hash {} after conflict", fallbackHash);
+                return requestHashAllocation(fallbackHash);
+            } else {
+                throw new RuntimeException("Unable to find fallback hash after priority conflict");
+            }
         }
         
         // ✅ Sub-phase 3.2: CONFIRMATION (Confirmation phase)
@@ -443,6 +521,24 @@ public class DynamicHashAllocator {
         String nodeUrl = request.getNodeUrl();
         
         log.info("[DynamicHashAllocator] Received hash confirmation for hash: {} from node: {}", hash, nodeUrl);
+        
+        // Check for hash conflicts before adding
+        String existingNode = fingerTable.finger.get(hash);
+        if (existingNode != null && !existingNode.equals(nodeUrl)) {
+            log.error("[DynamicHashAllocator] HASH CONFLICT DETECTED! Hash {} already occupied by {} but requested by {}", 
+                     hash, existingNode, nodeUrl);
+            
+            // Send rejection message back to the conflicting node
+            GossipMsg rejectionMsg = GossipMsg.builder()
+                    .msgType(GossipMsg.Type.HOST_DOWN)
+                    .msgContent("HASH_CONFLICT:" + hash + ":" + nodeUrl)
+                    .senderId(CURRENT_NODE_URL)
+                    .timestamp(String.valueOf(System.currentTimeMillis()))
+                    .build();
+            
+            gossipService.randomSendGossip(rejectionMsg, List.of(nodeUrl));
+            return; // Do not add the conflicting entry
+        }
         
         // Official addition to finger table
         fingerTable.finger.put(hash, nodeUrl);
