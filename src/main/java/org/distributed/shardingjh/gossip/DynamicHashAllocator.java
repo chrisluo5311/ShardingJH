@@ -225,6 +225,18 @@ public class DynamicHashAllocator {
     private Integer requestHashAllocation(Integer proposedHash) throws InterruptedException {
         log.info("[DynamicHashAllocator] Phase 3: Two-phase commit to apply hash: {}", proposedHash);
         
+        // Get all known nodes first to determine if we're truly alone
+        List<String> allNodes = bootstrapService.getAllKnownNodes();
+        
+        // Check if this is truly a single-node network (no other known nodes)
+        if (allNodes.isEmpty()) {
+            log.info("[DynamicHashAllocator] 🏁 Single node network detected (no known nodes), direct allocation without confirmation");
+            fingerTable.finger.put(proposedHash, CURRENT_NODE_URL);
+            bootstrapService.unregisterBootstrapNode();
+            log.info("[DynamicHashAllocator] 🚀 Successfully allocated hash: {} to node: {} (single node mode)", proposedHash, CURRENT_NODE_URL);
+            return proposedHash;
+        }
+        
         // Check if local conflict exists
         if (hashReservations.containsKey(proposedHash)) {
             NodeJoinRequest conflictingRequest = hashReservations.get(proposedHash);
@@ -258,7 +270,6 @@ public class DynamicHashAllocator {
                 .build();
         
         // Use all known nodes for proposal sending
-        List<String> allNodes = bootstrapService.getAllKnownNodes();
         log.info("[DynamicHashAllocator] Sending proposal to all known nodes: {}", allNodes);
         
         if (!allNodes.isEmpty()) {
