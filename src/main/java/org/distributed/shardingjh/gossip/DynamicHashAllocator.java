@@ -471,6 +471,7 @@ public class DynamicHashAllocator {
                 .timestamp(originalRequest.getTimestamp())  // Keep original timestamp
                 .accepted(accepted)                         // Whether accepted
                 .respondingNode(CURRENT_NODE_URL)           // Reply node
+                .conflictResolver(originalRequest.generateConflictResolver()) // Keep original conflict resolver
                 .build();
         
         GossipMsg ackGossip = GossipMsg.builder()
@@ -582,14 +583,15 @@ public class DynamicHashAllocator {
      * Serialize join request (Updated version - Support new fields)
      */
     private String serializeJoinRequest(NodeJoinRequest request) {
-        return String.format("%s|%s|%s|%d|%d|%s|%s", 
+        return String.format("%s|%s|%s|%d|%d|%s|%s|%s", 
                 request.getNodeUrl(),
                 request.getPhase().name(),
                 request.getProposedHash() != null ? request.getProposedHash().toString() : "null",
                 request.getTimestamp(),
                 request.calculatePriority(),
                 request.getAccepted() != null ? request.getAccepted().toString() : "null",
-                request.getRespondingNode() != null ? request.getRespondingNode() : "null");
+                request.getRespondingNode() != null ? request.getRespondingNode() : "null",
+                request.generateConflictResolver() != null ? request.generateConflictResolver() : "null");
     }
     
     /**
@@ -597,7 +599,7 @@ public class DynamicHashAllocator {
      */
     private NodeJoinRequest deserializeJoinRequest(String content) {
         String[] parts = content.split("\\|");
-        return NodeJoinRequest.builder()
+        NodeJoinRequest request = NodeJoinRequest.builder()
                 .nodeUrl(parts[0])
                 .phase(NodeJoinRequest.Phase.valueOf(parts[1]))
                 .proposedHash("null".equals(parts[2]) ? null : Integer.parseInt(parts[2]))
@@ -605,7 +607,10 @@ public class DynamicHashAllocator {
                 .priority(Integer.parseInt(parts[4]))
                 .accepted(parts.length > 5 && !"null".equals(parts[5]) ? Boolean.parseBoolean(parts[5]) : null)
                 .respondingNode(parts.length > 6 && !"null".equals(parts[6]) ? parts[6] : null)
+                .conflictResolver(parts.length > 7 && !"null".equals(parts[7]) ? parts[7] : null)
                 .build();
+        
+        return request;
     }
     
     /**
