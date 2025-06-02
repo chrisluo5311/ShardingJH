@@ -1,11 +1,8 @@
 package org.distributed.shardingjh.gossip;
 
 import java.util.ArrayList;
-import java.util.HashSet;
 import java.util.Map;
-import java.util.Set;
 
-import org.distributed.shardingjh.common.constant.ShardConst;
 import org.distributed.shardingjh.p2p.FingerTable;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.ApplicationArguments;
@@ -83,18 +80,10 @@ public class InitialGossipStarter implements ApplicationRunner {
                 } catch (InterruptedException e) {
                     log.error("[sendInitialGossip] Dynamic hash allocation was interrupted: {}", e.getMessage());
                     Thread.currentThread().interrupt();
-                    // Fallback to simple hash generation
-                    Set<Integer> existingHashes = new HashSet<>(fingerTable.finger.keySet());
-                    currentNodeHash = fallbackSimpleHashGeneration(CURRENT_NODE_URL, existingHashes);
-                    fingerTable.finger.put(currentNodeHash, CURRENT_NODE_URL);
-                    log.warn("[sendInitialGossip] Used fallback hash generation, allocated hash: {}", currentNodeHash);
+                    throw new RuntimeException("Dynamic hash allocation was interrupted", e);
                 } catch (Exception e) {
                     log.error("[sendInitialGossip] Dynamic hash allocation failed: {}", e.getMessage());
-                    // Fallback to simple hash generation
-                    Set<Integer> existingHashes = new HashSet<>(fingerTable.finger.keySet());
-                    currentNodeHash = fallbackSimpleHashGeneration(CURRENT_NODE_URL, existingHashes);
-                    fingerTable.finger.put(currentNodeHash, CURRENT_NODE_URL);
-                    log.warn("[sendInitialGossip] Used fallback hash generation, allocated hash: {}", currentNodeHash);
+                    throw new RuntimeException("Dynamic hash allocation failed", e);
                 }
             }
         }
@@ -105,14 +94,6 @@ public class InitialGossipStarter implements ApplicationRunner {
         
         // Verify current node is in finger table before sending gossip
         log.info("[sendInitialGossip] Current finger table before sending gossip: {}", fingerTable.finger);
-        if (!fingerTable.finger.containsValue(CURRENT_NODE_URL)) {
-            log.warn("[sendInitialGossip] Current node {} not found in finger table, this may cause issues!", CURRENT_NODE_URL);
-            // If for some reason current node is not in finger table, add it
-            if (currentNodeHash != null) {
-                fingerTable.finger.put(currentNodeHash, CURRENT_NODE_URL);
-                log.info("[sendInitialGossip] Force-added current node to finger table: {} -> {}", currentNodeHash, CURRENT_NODE_URL);
-            }
-        }
         
         // Create gossip message with unique identifier
         GossipMsg gossipMsg = GossipMsg.builder()
@@ -144,31 +125,5 @@ public class InitialGossipStarter implements ApplicationRunner {
             }
         }
         return null;
-    }
-    
-    /**
-     * Fallback method for hash generation when dynamic allocation fails
-     * @param nodeUrl Node URL  
-     * @param existingHashes Existing hash values
-     * @return Hash value
-     */
-    private Integer fallbackSimpleHashGeneration(String nodeUrl, Set<Integer> existingHashes) {
-        log.warn("[fallbackSimpleHashGeneration] Using fallback hash generation for node {}", nodeUrl);
-        
-        int baseHash = Math.abs(nodeUrl.hashCode()) % ShardConst.FINGER_MAX_RANGE;
-        int candidateHash = baseHash;
-        int attempts = 0;
-        final int MAX_ATTEMPTS = ShardConst.FINGER_MAX_RANGE;
-        
-        while (attempts < MAX_ATTEMPTS) {
-            if (!existingHashes.contains(candidateHash)) {
-                log.info("[fallbackSimpleHashGeneration] Found available hash {} after {} attempts", candidateHash, attempts);
-                return candidateHash;
-            }
-            candidateHash = (candidateHash + 1) % ShardConst.FINGER_MAX_RANGE;
-            attempts++;
-        }
-        
-        throw new RuntimeException("Unable to generate unique hash for node " + nodeUrl + " after " + MAX_ATTEMPTS + " attempts. Finger table may be full.");
     }
 }
