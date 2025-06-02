@@ -197,6 +197,49 @@ public class GossipService {
         }
     }
 
+    /**
+     * Send gossip message to ALL specified nodes (for critical messages like HASH_PROPOSAL)
+     * Unlike randomSendGossip which only sends to 2 random nodes, this sends to all
+     */
+    public void sendToAllNodes(GossipMsg gossipMsg, List<String> neighbors) {
+        if (neighbors.isEmpty()) {
+            log.warn("[GossipService] No neighbors to send gossip message to.");
+            return;
+        }
+
+        // Filter out current node from neighbors first
+        List<String> validNeighbors = new ArrayList<>();
+        String currentIp = getCurrentIp();
+        
+        for (String neighborUrl : neighbors) {
+            String[] partsNeighbor = neighborUrl.split(":");
+            String neighborIp = partsNeighbor[1].replace("//", "");
+            if (!neighborIp.equals(currentIp)) {
+                validNeighbors.add(neighborUrl);
+            }
+        }
+        
+        if (validNeighbors.isEmpty()) {
+            log.warn("[GossipService] No valid neighbors to send gossip message to (all are current node).");
+            return;
+        }
+
+        // Send to ALL valid neighbors (not just 2 random ones)
+        log.info("[GossipService] Sending gossip message to ALL {} neighbors", validNeighbors.size());
+        for (String neighborUrl : validNeighbors) {
+            String[] partsNeighbor = neighborUrl.split(":");
+            String neighborIp = partsNeighbor[1].replace("//", "");
+            
+            log.info("[GossipService] Sending gossip message to neighbor: {}", neighborIp);
+            try {
+                gossipSender.sendGossip(gossipMsg, neighborIp, PORT);
+                log.debug("[GossipService] Successfully sent gossip message to: {}", neighborIp);
+            } catch (Exception e) {
+                log.error("[GossipService] Failed to send gossip message to {}: {}", neighborIp, e.getMessage());
+            }
+        }
+    }
+
     // Send HOSTUP gossip message
 //    public void sendHostUpGossip(GossipNode self, int hash, String address, int numberOfNodes) {
 //        GossipMsg msg = new GossipMsg();

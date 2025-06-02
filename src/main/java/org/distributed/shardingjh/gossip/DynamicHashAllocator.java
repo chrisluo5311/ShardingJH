@@ -262,11 +262,11 @@ public class DynamicHashAllocator {
         log.info("[DynamicHashAllocator] Sending proposal to all known nodes: {}", allNodes);
         
         if (!allNodes.isEmpty()) {
-            gossipService.randomSendGossip(proposalGossip, allNodes);
+            gossipService.sendToAllNodes(proposalGossip, allNodes);
         } else {
             log.warn("[DynamicHashAllocator] No nodes found for proposal, using finger table only");
             allNodes = new ArrayList<>(fingerTable.finger.values());
-            gossipService.randomSendGossip(proposalGossip, allNodes);
+            gossipService.sendToAllNodes(proposalGossip, allNodes);
         }
         
         // ⏰ Wait for acknowledgment collection period
@@ -481,11 +481,21 @@ public class DynamicHashAllocator {
                 .timestamp(String.valueOf(System.currentTimeMillis()))
                 .build();
         
-        // Send directly to request node
+        // Send directly to request node with retry mechanism for better reliability
         List<String> targetNode = List.of(originalRequest.getNodeUrl());
-        gossipService.randomSendGossip(ackGossip, targetNode);
         
-        log.info("[DynamicHashAllocator] 📤 Sent confirmation reply to {}: {} ({})", 
+        // Send multiple times to improve UDP reliability
+        for (int i = 0; i < 3; i++) {
+            gossipService.sendToAllNodes(ackGossip, targetNode);
+            try {
+                Thread.sleep(100); // Small delay between retries
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                break;
+            }
+        }
+        
+        log.info("[DynamicHashAllocator] 📤 Sent confirmation reply to {}: {} ({}) with 3 retries", 
                 originalRequest.getNodeUrl(), accepted ? "Accepted" : "Rejected", reason);
     }
     
