@@ -48,6 +48,7 @@ public class MemberController {
     @RequestMapping(value = "/user/save", method = RequestMethod.POST)
     public MgrResponseDto<Member> saveMember(@RequestBody Member member,
                                              @RequestHeader(value = "X-Signature") String signature) throws JsonProcessingException {
+        long startLocal = System.nanoTime();
         // Check signature
         String rawBody = SignatureUtil.toCanonicalJson(member, objectMapper);
         String expectedSignature = EncryptUtil.hmacSha256(rawBody, SECRET_KEY);
@@ -60,12 +61,16 @@ public class MemberController {
         String responsibleUrl = serverRouter.getMemberResponsibleServerUrl(member.getId());
         if (!CURRENT_NODE_URL.equals(responsibleUrl)) {
             try {
+                log.info("Forwarding [saveMember] request to responsible server: {}", responsibleUrl);
                 return serverRouter.forwardPost(responsibleUrl, "/user/save", signature, member, MgrResponseDto.class);
             } catch (JsonProcessingException e) {
                 return  MgrResponseDto.error(MgrResponseCode.JSON_PARSE_ERROR);
             }
         }
         Member newMember = memberServiceImpl.saveMember(member);
+        long endLocal = System.nanoTime();
+        long localLatency = endLocal - startLocal;
+        log.info("Local [save Member] latency: {} ns", localLatency);
         return MgrResponseDto.success(newMember);
     }
 
@@ -93,6 +98,7 @@ public class MemberController {
 
     @RequestMapping(value = "/user/getAll", method = RequestMethod.GET)
     public MgrResponseDto<List<Member>> getAllMembers(@RequestHeader(value = "X-Signature") String signature) {
+        long startLocal = System.nanoTime();
         // Check signature
         String endPointPath = "/user/getAll";
         String expectedSignature = EncryptUtil.hmacSha256(endPointPath, SECRET_KEY);
@@ -116,6 +122,9 @@ public class MemberController {
             }
         }
         log.info("Size of all members: {}", all.size());
+        long endLocal = System.nanoTime();
+        long localLatency = endLocal - startLocal;
+        log.info("Local [get all members] latency: {} ns", localLatency);
         return MgrResponseDto.success(all);
     }
 
@@ -130,6 +139,7 @@ public class MemberController {
     @RequestMapping(value = "/user/update", method = RequestMethod.POST)
     public MgrResponseDto<Member> updateMember(@RequestBody Member member,
                                                @RequestHeader(value = "X-Signature") String signature) throws JsonProcessingException {
+        long startLocal = System.nanoTime();
         // Check signature
         String rawBody = SignatureUtil.toCanonicalJson(member, objectMapper);
         String expectedSignature = EncryptUtil.hmacSha256(rawBody, SECRET_KEY);
@@ -142,6 +152,7 @@ public class MemberController {
         if (!CURRENT_NODE_URL.equals(responsibleUrl)) {
             // forward the request to the correct server
             try {
+                log.info("Forwarding [updateMember] request to responsible server: {}", responsibleUrl);
                 return serverRouter.forwardPost(responsibleUrl, "/user/update", signature, member, MgrResponseDto.class);
             } catch (JsonProcessingException e) {
                 return  MgrResponseDto.error(MgrResponseCode.JSON_PARSE_ERROR);
@@ -151,6 +162,9 @@ public class MemberController {
         if (updatedMember == null) {
             return MgrResponseDto.error(MgrResponseCode.MEMBER_NAME_INVALID);
         }
+        long endLocal = System.nanoTime();
+        long localLatency = endLocal - startLocal;
+        log.info("Local [update member] latency: {} ns", localLatency);
         return MgrResponseDto.success(updatedMember);
     }
 
