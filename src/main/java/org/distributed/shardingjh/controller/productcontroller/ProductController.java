@@ -24,8 +24,12 @@ public class ProductController {
 
     @RequestMapping(value = "/add", method = RequestMethod.POST)
     public MgrResponseDto<Product> addProduct(@RequestBody ProductRequest productRequest) {
+        long startTime = System.nanoTime();
         Product product = productService.addOrUpdateProduct(productRequest);
         productSyncProducer.publishProductUpdate("add", product.getId(), product.getName(), product.getPrice());
+        long endTime = System.nanoTime();
+        long latency = endTime - startTime;
+        log.info("Product added with latency: {} ns", latency);
         return MgrResponseDto.success(product);
     }
 

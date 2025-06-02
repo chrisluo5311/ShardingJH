@@ -45,6 +45,7 @@ public class OrderController {
     @RequestMapping(value = "/order/save", method = RequestMethod.POST)
     public MgrResponseDto<OrderTable> saveOrder(@RequestBody RequestOrder requestOrder,
                                                 @RequestHeader(value = "X-Signature") String signature) throws JsonProcessingException {
+        long startLocal = System.nanoTime();
         // Check signature
         String rawBody = SignatureUtil.toCanonicalJson(requestOrder, objectMapper);
         String expectedSignature = EncryptUtil.hmacSha256(rawBody, SECRET_KEY);
@@ -56,11 +57,15 @@ public class OrderController {
         // Determine responsible server
         String responsibleUrl = serverRouter.getOrderResponsibleServerUrl(requestOrder.getOrderId());
         if (!CURRENT_NODE_URL.equals(responsibleUrl)) {
+            log.info("Forwarding [saveOrder] request to responsible server: {}", responsibleUrl);
             // forward the request to the correct server
             return serverRouter.forwardPost(responsibleUrl, "/order/save", signature, requestOrder, MgrResponseDto.class);
 
         }
         OrderTable order = orderServiceImpl.saveOrder(requestOrder);
+        long endLocal = System.nanoTime();
+        long localLatency = endLocal - startLocal;
+        log.info("Local [save order] latency: {} ns", localLatency);
         return MgrResponseDto.success(order);
     }
 
@@ -90,9 +95,9 @@ public class OrderController {
     public MgrResponseDto<OrderTable> updateOrder(@RequestBody OrderTable order,
                                                     @RequestHeader(value = "X-Signature") String signature) throws JsonProcessingException {
         try {
+            long startLocal = System.nanoTime();
             // Check signature
             String rawBody = SignatureUtil.toCanonicalJson(order, objectMapper);
-            log.info("rawBody: {}", rawBody);
             String expectedSignature = EncryptUtil.hmacSha256(rawBody, SECRET_KEY);
             log.info("Expected signature: {}, X-Signature: {}", expectedSignature, signature);
             if (!expectedSignature.equals(signature)) {
@@ -103,10 +108,14 @@ public class OrderController {
             // Determine responsible server
             String responsibleUrl = serverRouter.getOrderResponsibleServerUrl(order.getId().getOrderId());
             if (!CURRENT_NODE_URL.equals(responsibleUrl)) {
+                log.info("Forwarding [updateOrder] request to responsible server: {}", responsibleUrl);
                 // forward the request to the correct server
                 return serverRouter.forwardPost(responsibleUrl, "/order/update", signature, order, MgrResponseDto.class);
             }
             OrderTable result = orderServiceImpl.updateOrder(order);
+            long endLocal = System.nanoTime();
+            long localLatency = endLocal - startLocal;
+            log.info("Local [update order] latency: {} ns", localLatency);
             return (result == null) ? MgrResponseDto.error(MgrResponseCode.ORDER_NOT_FOUND) : MgrResponseDto.success(result);
         } catch (Exception e) {
             return MgrResponseDto.error(MgrResponseCode.DB_CONFLICT.getCode(),MgrResponseCode.DB_CONFLICT.getMessage()+
@@ -117,6 +126,7 @@ public class OrderController {
     @RequestMapping(value = "/order/findRange", method = RequestMethod.GET)
     public MgrResponseDto<List<OrderTable>> findOrderBetween(String startDate, String endDate,
                                                                 @RequestHeader(value = "X-Signature", required = false) String signature) {
+        long startLocal = System.nanoTime();
         // Check signature
         String endPointPath = "/order/findRange?startDate=" + startDate + "&endDate=" + endDate;
         String expectedSignature = EncryptUtil.hmacSha256(endPointPath, SECRET_KEY);
@@ -143,7 +153,9 @@ public class OrderController {
         if (all.isEmpty()) {
             return MgrResponseDto.error(MgrResponseCode.ORDER_NOT_FOUND);
         }
-
+        long endLocal = System.nanoTime();
+        long localLatency = endLocal - startLocal;
+        log.info("Local [find order range] latency: {} ns", localLatency);
         return MgrResponseDto.success(all);
     }
 
@@ -158,6 +170,7 @@ public class OrderController {
     @RequestMapping(value = "/order/getOne", method = RequestMethod.GET)
     public MgrResponseDto<OrderTable> findOrderById(String orderId,String createTime,
                                                     @RequestHeader(value = "X-Signature", required = false) String signature) {
+        long startLocal = System.nanoTime();
         // Check signature
         String endPointPath = "/order/getOne?orderId=" + orderId + "&createTime=" + createTime;
         String expectedSignature = EncryptUtil.hmacSha256(endPointPath, SECRET_KEY);
@@ -178,6 +191,9 @@ public class OrderController {
         if (result == null) {
             return MgrResponseDto.error(MgrResponseCode.ORDER_NOT_FOUND);
         }
+        long endLocal = System.nanoTime();
+        long localLatency = endLocal - startLocal;
+        log.info("Local [find order by id] latency: {} ns", localLatency);
         return MgrResponseDto.success(result);
     }
 
