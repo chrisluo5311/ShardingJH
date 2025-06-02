@@ -31,5 +31,9 @@ public class GossipMsg {
     public enum Type {
         HOST_DOWN,
         HOST_ADD,
+        NODE_JOIN,        // Node join discovery request
+        HASH_PROPOSAL,    // Hash proposal phase
+        HASH_PROPOSAL_ACK,// Hash proposal acknowledgment reply phase
+        HASH_CONFIRMATION // Hash confirmation phase
     }
 }
