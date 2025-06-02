@@ -55,13 +55,26 @@ public class GossipService {
         String msgKey = message.getSenderId() + "_" + message.getTimestamp() + "_" + message.getMsgType();
         log.info("[GossipService] Received gossip message key: {}", msgKey);
         
-        // Check for duplicate based on sender + timestamp + type
-        Integer count = msgCache.getOrDefault(msgKey, 0);
-        if (count >= 1) {
-            log.info("[GossipService] Duplicate gossip message received (same sender+timestamp), ignoring: {}", msgKey);
-            return;
+        // For hash allocation messages, use less strict duplicate detection
+        // Allow retries for HASH_PROPOSAL and HASH_PROPOSAL_ACK messages
+        if (message.getMsgType() == GossipMsg.Type.HASH_PROPOSAL || 
+            message.getMsgType() == GossipMsg.Type.HASH_PROPOSAL_ACK) {
+            // For critical hash allocation messages, allow up to 3 duplicates
+            Integer count = msgCache.getOrDefault(msgKey, 0);
+            if (count >= 3) {
+                log.info("[GossipService] Too many duplicates for hash allocation message, ignoring: {}", msgKey);
+                return;
+            }
+            msgCache.put(msgKey, count + 1);
+        } else {
+            // For other messages, use stricter duplicate detection
+            Integer count = msgCache.getOrDefault(msgKey, 0);
+            if (count >= 1) {
+                log.info("[GossipService] Duplicate gossip message received (same sender+timestamp), ignoring: {}", msgKey);
+                return;
+            }
+            msgCache.put(msgKey, count + 1);
         }
-        msgCache.put(msgKey, count + 1);
         
         if (msgCache.size() > CACHE_SIZE_LIMIT) {
             msgCache.clear();
@@ -132,7 +145,8 @@ public class GossipService {
                 case HASH_PROPOSAL_ACK:
                 case HASH_CONFIRMATION: {
                     // Handle dynamic hash allocation related messages
-                    log.info("[GossipService] Received dynamic hash allocation message: {}", message.getMsgType());
+                    log.info("[GossipService] Received dynamic hash allocation message: {} from sender: {}", 
+                             message.getMsgType(), message.getSenderId());
                     
                     // Special handling for bootstrap announcements
                     if (message.getMsgType() == GossipMsg.Type.NODE_JOIN && 
@@ -140,7 +154,14 @@ public class GossipService {
                         String bootstrapNode = message.getMsgContent().substring("BOOTSTRAP:".length());
                         bootstrapService.handleBootstrapAnnouncement(bootstrapNode);
                     } else {
-                        dynamicHashAllocator.handleHashAllocationGossip(message);
+                        // Add more detailed logging for hash allocation messages
+                        log.info("[GossipService] Processing hash allocation message content: {}", message.getMsgContent());
+                        try {
+                            dynamicHashAllocator.handleHashAllocationGossip(message);
+                            log.info("[GossipService] Successfully processed hash allocation message: {}", message.getMsgType());
+                        } catch (Exception e) {
+                            log.error("[GossipService] Failed to process hash allocation message: {}", e.getMessage(), e);
+                        }
                     }
                     // These messages don't need further propagation, as DynamicHashAllocator handles propagation logic
                     }
@@ -151,7 +172,7 @@ public class GossipService {
                 randomSendGossip(gossipMsg, new ArrayList<>(fingerTable.finger.values()));
             }
         } catch (Exception e) {
-            log.error("[GossipService] Failed to handle gossip message: {}", e.getMessage());
+            log.error("[GossipService] Failed to handle gossip message: {}", e.getMessage(), e);
         }
     }
 
@@ -224,15 +245,27 @@ public class GossipService {
             return;
         }
 
+        // Determine if this is a critical hash allocation message that needs retries
+        boolean isCriticalMessage = gossipMsg.getMsgType() == GossipMsg.Type.HASH_PROPOSAL ||
+                                   gossipMsg.getMsgType() == GossipMsg.Type.HASH_PROPOSAL_ACK ||
+                                   gossipMsg.getMsgType() == GossipMsg.Type.HASH_CONFIRMATION;
+        
+        int retries = isCriticalMessage ? 2 : 1; // Use retries for critical messages
+        
         // Send to ALL valid neighbors (not just 2 random ones)
-        log.info("[GossipService] Sending gossip message to ALL {} neighbors", validNeighbors.size());
+        log.info("[GossipService] Sending gossip message to ALL {} neighbors{}", 
+                validNeighbors.size(), isCriticalMessage ? " with retries" : "");
         for (String neighborUrl : validNeighbors) {
             String[] partsNeighbor = neighborUrl.split(":");
             String neighborIp = partsNeighbor[1].replace("//", "");
             
             log.info("[GossipService] Sending gossip message to neighbor: {}", neighborIp);
             try {
-                gossipSender.sendGossip(gossipMsg, neighborIp, PORT);
+                if (isCriticalMessage) {
+                    gossipSender.sendGossipWithRetries(gossipMsg, neighborIp, PORT, retries);
+                } else {
+                    gossipSender.sendGossip(gossipMsg, neighborIp, PORT);
+                }
                 log.debug("[GossipService] Successfully sent gossip message to: {}", neighborIp);
             } catch (Exception e) {
                 log.error("[GossipService] Failed to send gossip message to {}: {}", neighborIp, e.getMessage());

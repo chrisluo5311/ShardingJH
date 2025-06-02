@@ -43,6 +43,10 @@ public class hearBeatSender {
     @Lazy
     private GossipService gossipService;
 
+    @Resource
+    @Lazy
+    private org.distributed.shardingjh.gossip.BootstrapService bootstrapService;
+
     @Value("${router.server-url}")
     private String CURRENT_NODE_URL;
 
@@ -155,6 +159,9 @@ public class hearBeatSender {
      */
     private void handleNodeFailure(String failedNodeUrl) {
         log.warn("[HeartBeat] Detected node failure: {}", failedNodeUrl);
+        
+        // Mark node as failed in BootstrapService
+        bootstrapService.markNodeAsFailed(failedNodeUrl);
         
         // Find the hash key for the failed node
         Integer failedNodeHash = findHashByNodeUrl(failedNodeUrl);

@@ -47,6 +47,10 @@ public class heartBeatReceiver {
     @Lazy
     private GossipService gossipService;
 
+    @Resource
+    @Lazy
+    private org.distributed.shardingjh.gossip.BootstrapService bootstrapService;
+
     // Store last heartbeat time for each node
     private final ConcurrentHashMap<String, String> nodeLastHeartbeat = new ConcurrentHashMap<>();
 
@@ -72,6 +76,12 @@ public class heartBeatReceiver {
             
             // Update node last heartbeat time
             nodeLastHeartbeat.put(fromNode, LocalDateTime.now().format(DateTimeFormatter.ISO_LOCAL_DATE_TIME));
+            
+            // Mark node as active if it was previously marked as failed
+            if (bootstrapService.isNodeFailed(fromNode)) {
+                bootstrapService.markNodeAsActive(fromNode);
+                log.info("[HeartBeat] Node {} recovered from failure, marked as active", fromNode);
+            }
             
             // Build response
             Map<String, Object> response = new HashMap<>();
@@ -150,6 +160,9 @@ public class heartBeatReceiver {
      */
     private void confirmNodeFailure(String nodeUrl, long minutesOffline) {
         log.warn("[HeartBeat] *** NODE FAILURE CONFIRMED *** Node: {}, Offline for: {} minutes", nodeUrl, minutesOffline);
+        
+        // Mark node as failed in BootstrapService
+        bootstrapService.markNodeAsFailed(nodeUrl);
         
         // Find the hash key for the failed node
         Integer failedNodeHash = findHashByNodeUrl(nodeUrl);

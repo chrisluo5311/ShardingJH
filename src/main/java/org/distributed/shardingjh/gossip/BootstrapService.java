@@ -43,8 +43,14 @@ public class BootstrapService {
     // Bootstrap nodes cache - nodes that don't have hash yet but are trying to join
     private final ConcurrentHashMap<String, Long> bootstrapNodes = new ConcurrentHashMap<>();
     
+    // Failed nodes cache - nodes that have been detected as down
+    private final ConcurrentHashMap<String, Long> failedNodes = new ConcurrentHashMap<>();
+    
     // Timeout for bootstrap nodes (30 seconds)
     private static final long BOOTSTRAP_TIMEOUT_MS = 30000;
+    
+    // Timeout for failed nodes (60 seconds) - longer than bootstrap to avoid immediate retry
+    private static final long FAILED_NODE_TIMEOUT_MS = 60000;
     
     // Scheduler for cleanup tasks
     private final ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(1);
@@ -53,6 +59,7 @@ public class BootstrapService {
     public void init() {
         // Schedule cleanup task every 30 seconds
         scheduler.scheduleAtFixedRate(this::cleanupExpiredBootstrapNodes, 30, 30, TimeUnit.SECONDS);
+        scheduler.scheduleAtFixedRate(this::cleanupExpiredFailedNodes, 60, 60, TimeUnit.SECONDS);
     }
     
     /**
@@ -93,8 +100,18 @@ public class BootstrapService {
         // Remove current node
         allNodes.remove(CURRENT_NODE_URL);
         
+        // Remove failed nodes
+        allNodes.removeIf(nodeUrl -> {
+            boolean isFailed = isNodeFailed(nodeUrl);
+            if (isFailed) {
+                log.debug("[BootstrapService] Excluding failed node from known nodes: {}", nodeUrl);
+            }
+            return isFailed;
+        });
+        
         List<String> result = new ArrayList<>(allNodes);
-        log.debug("[BootstrapService] All known nodes: {}", result);
+        log.debug("[BootstrapService] All known nodes (excluding {} failed): {}", 
+                 failedNodes.size(), result);
         return result;
     }
     
@@ -211,5 +228,42 @@ public class BootstrapService {
             }
         }
         return entries;
+    }
+    
+    /**
+     * Mark a node as failed/down
+     */
+    public void markNodeAsFailed(String nodeUrl) {
+        failedNodes.put(nodeUrl, System.currentTimeMillis());
+        log.info("[BootstrapService] Marked node as failed: {}", nodeUrl);
+    }
+    
+    /**
+     * Check if a node is marked as failed
+     */
+    public boolean isNodeFailed(String nodeUrl) {
+        return failedNodes.containsKey(nodeUrl);
+    }
+    
+    /**
+     * Remove a node from failed list (if it comes back online)
+     */
+    public void markNodeAsActive(String nodeUrl) {
+        failedNodes.remove(nodeUrl);
+        log.info("[BootstrapService] Marked node as active: {}", nodeUrl);
+    }
+    
+    /**
+     * Clean up expired failed nodes
+     */
+    private void cleanupExpiredFailedNodes() {
+        long now = System.currentTimeMillis();
+        failedNodes.entrySet().removeIf(entry -> {
+            boolean expired = (now - entry.getValue()) > FAILED_NODE_TIMEOUT_MS;
+            if (expired) {
+                log.info("[BootstrapService] Cleaning up expired failed node: {}", entry.getKey());
+            }
+            return expired;
+        });
     }
 } 

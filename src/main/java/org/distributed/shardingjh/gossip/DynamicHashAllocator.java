@@ -283,7 +283,32 @@ public class DynamicHashAllocator {
         // ⏰ Wait for acknowledgment collection period
         log.info("[DynamicHashAllocator] Waiting for network node to confirm proposal...");
         log.info("[DynamicHashAllocator] Request ID: {}, waiting for confirmations from {} nodes", requestId, allNodes.size());
-        Thread.sleep(RESERVATION_TIMEOUT_MS); // 10 seconds
+        
+        // Reduce wait time to 6 seconds and add periodic checks
+        int totalWaitTimeMs = 6000;
+        int checkIntervalMs = 1000; // Check every 1 second
+        int checksPerformed = 0;
+        
+        for (int elapsed = 0; elapsed < totalWaitTimeMs; elapsed += checkIntervalMs) {
+            Thread.sleep(checkIntervalMs);
+            checksPerformed++;
+            
+            Set<String> currentConfirmations = proposalAcknowledgments.get(requestId);
+            int currentCount = currentConfirmations != null ? currentConfirmations.size() : 0;
+            
+            log.info("[DynamicHashAllocator] ⏱️ Check #{}: {} confirmations received after {}ms", 
+                    checksPerformed, currentCount, elapsed + checkIntervalMs);
+            
+            if (currentConfirmations != null) {
+                log.info("[DynamicHashAllocator] 📋 Current confirmations: {}", currentConfirmations);
+            }
+            
+            // Early exit if we have enough confirmations for single-node networks
+            if (allNodes.size() <= 1 && currentCount >= 0) {
+                log.info("[DynamicHashAllocator] 🚀 Early exit for single/small network");
+                break;
+            }
+        }
         
         // 📊 Check acknowledgment result
         Set<String> confirmations = proposalAcknowledgments.get(requestId);
@@ -386,23 +411,36 @@ public class DynamicHashAllocator {
      * Handle received hash allocation-related gossip messages
      */
     public void handleHashAllocationGossip(GossipMsg message) {
-        NodeJoinRequest request = deserializeJoinRequest(message.getMsgContent());
-        
-        switch (request.getPhase()) {
-            case DISCOVERY:
-                handleDiscoveryRequest(request);
-                break;
-            case PROPOSAL:
-                handleHashProposal(request);
-                break;
-            case PROPOSAL_ACK:
-                handleProposalAcknowledgment(request);
-                break;
-            case CONFIRMATION:
-                handleHashConfirmation(request);
-                break;
-            default:
-                log.warn("[DynamicHashAllocator] Unknown phase: {}", request.getPhase());
+        try {
+            log.info("[DynamicHashAllocator] Handling hash allocation gossip: {} from {}", 
+                     message.getMsgType(), message.getSenderId());
+            log.debug("[DynamicHashAllocator] Message content: {}", message.getMsgContent());
+            
+            NodeJoinRequest request = deserializeJoinRequest(message.getMsgContent());
+            log.info("[DynamicHashAllocator] Deserialized request - Phase: {}, Node: {}, Hash: {}", 
+                     request.getPhase(), request.getNodeUrl(), request.getProposedHash());
+            
+            switch (request.getPhase()) {
+                case DISCOVERY:
+                    handleDiscoveryRequest(request);
+                    break;
+                case PROPOSAL:
+                    handleHashProposal(request);
+                    break;
+                case PROPOSAL_ACK:
+                    handleProposalAcknowledgment(request);
+                    break;
+                case CONFIRMATION:
+                    handleHashConfirmation(request);
+                    break;
+                default:
+                    log.warn("[DynamicHashAllocator] Unknown phase: {}", request.getPhase());
+            }
+        } catch (Exception e) {
+            log.error("[DynamicHashAllocator] Failed to handle hash allocation gossip message: {}", 
+                     e.getMessage(), e);
+            log.error("[DynamicHashAllocator] Problematic message - Type: {}, Content: {}, Sender: {}", 
+                     message.getMsgType(), message.getMsgContent(), message.getSenderId());
         }
     }
     
@@ -475,6 +513,9 @@ public class DynamicHashAllocator {
      * Send proposal acknowledgment reply
      */
     private void sendProposalAcknowledgment(NodeJoinRequest originalRequest, boolean accepted, String reason) {
+        log.info("[DynamicHashAllocator] 🚀 Preparing to send confirmation reply to {}: {} ({})", 
+                originalRequest.getNodeUrl(), accepted ? "Accepted" : "Rejected", reason);
+        
         NodeJoinRequest ackRequest = NodeJoinRequest.builder()
                 .nodeUrl(originalRequest.getNodeUrl())      // Original request node
                 .phase(NodeJoinRequest.Phase.PROPOSAL_ACK)  // Confirmation phase
@@ -485,6 +526,9 @@ public class DynamicHashAllocator {
                 .conflictResolver(originalRequest.generateConflictResolver()) // Keep original conflict resolver
                 .build();
         
+        log.info("[DynamicHashAllocator] 🔗 Built ACK request - ConflictResolver: {}, Hash: {}", 
+                ackRequest.generateConflictResolver(), ackRequest.getProposedHash());
+        
         GossipMsg ackGossip = GossipMsg.builder()
                 .msgType(GossipMsg.Type.HASH_PROPOSAL_ACK)
                 .msgContent(serializeJoinRequest(ackRequest))
@@ -492,22 +536,25 @@ public class DynamicHashAllocator {
                 .timestamp(String.valueOf(System.currentTimeMillis()))
                 .build();
         
-        // Send directly to request node with retry mechanism for better reliability
-        List<String> targetNode = List.of(originalRequest.getNodeUrl());
-        
-        // Send multiple times to improve UDP reliability
-        for (int i = 0; i < 3; i++) {
-            gossipService.sendToAllNodes(ackGossip, targetNode);
-            try {
-                Thread.sleep(100); // Small delay between retries
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-                break;
-            }
+        // Extract IP from URL for direct sending
+        String targetNodeUrl = originalRequest.getNodeUrl();
+        try {
+            String[] urlParts = targetNodeUrl.split(":");
+            String targetIp = urlParts[1].replace("//", "");
+            int gossipPort = 9000; // Use gossip port instead of application port
+            
+            log.info("[DynamicHashAllocator] 🌐 Sending ACK to IP: {}, Port: {}", targetIp, gossipPort);
+            log.info("[DynamicHashAllocator] 📦 ACK Message content: {}", ackGossip.getMsgContent());
+            
+            // Send with multiple retries for better reliability - increase retries to 5
+            gossipService.gossipSender.sendGossipWithRetries(ackGossip, targetIp, gossipPort, 5);
+            
+            log.info("[DynamicHashAllocator] 📤 Sent confirmation reply to {}: {} ({}) with 5 retries", 
+                    originalRequest.getNodeUrl(), accepted ? "Accepted" : "Rejected", reason);
+        } catch (Exception e) {
+            log.error("[DynamicHashAllocator] Failed to send confirmation reply to {}: {}", 
+                     originalRequest.getNodeUrl(), e.getMessage(), e);
         }
-        
-        log.info("[DynamicHashAllocator] 📤 Sent confirmation reply to {}: {} ({}) with 3 retries", 
-                originalRequest.getNodeUrl(), accepted ? "Accepted" : "Rejected", reason);
     }
     
     /**
@@ -528,13 +575,22 @@ public class DynamicHashAllocator {
         }
         
         String requestId = request.generateConflictResolver();
-        log.debug("[DynamicHashAllocator] Looking for request ID: {}", requestId);
+        log.info("[DynamicHashAllocator] 🔍 Processing confirmation for request ID: {}", requestId);
+        log.info("[DynamicHashAllocator] 📋 Available pending requests: {}", proposalAcknowledgments.keySet());
         
         Set<String> confirmations = proposalAcknowledgments.get(requestId);
         
         if (confirmations == null) {
-            log.warn("[DynamicHashAllocator] No pending request found for requestId: {}, available requests: {}", 
+            log.warn("[DynamicHashAllocator] ❌ No pending request found for requestId: {}, available requests: {}", 
                     requestId, proposalAcknowledgments.keySet());
+            
+            // Try to find similar request IDs in case of slight differences
+            log.info("[DynamicHashAllocator] 🔍 Searching for similar request IDs containing node URL...");
+            for (String availableId : proposalAcknowledgments.keySet()) {
+                if (availableId.contains(requesterNode)) {
+                    log.info("[DynamicHashAllocator] 🔍 Found similar request ID: {}", availableId);
+                }
+            }
             return;
         }
         
@@ -543,6 +599,7 @@ public class DynamicHashAllocator {
             if (added) {
                 log.info("[DynamicHashAllocator] ✅ Added confirmation from {}, current confirmation count: {}/{}", 
                         respondingNode, confirmations.size(), confirmations);
+                log.info("[DynamicHashAllocator] 📊 Current confirmations list: {}", confirmations);
             } else {
                 log.debug("[DynamicHashAllocator] Duplicate confirmation from {}, ignoring", respondingNode);
             }
@@ -619,19 +676,48 @@ public class DynamicHashAllocator {
      * Deserialize join request (Updated version - Support new fields)
      */
     private NodeJoinRequest deserializeJoinRequest(String content) {
-        String[] parts = content.split("\\|");
-        NodeJoinRequest request = NodeJoinRequest.builder()
-                .nodeUrl(parts[0])
-                .phase(NodeJoinRequest.Phase.valueOf(parts[1]))
-                .proposedHash("null".equals(parts[2]) ? null : Integer.parseInt(parts[2]))
-                .timestamp(Long.parseLong(parts[3]))
-                .priority(Integer.parseInt(parts[4]))
-                .accepted(parts.length > 5 && !"null".equals(parts[5]) ? Boolean.parseBoolean(parts[5]) : null)
-                .respondingNode(parts.length > 6 && !"null".equals(parts[6]) ? parts[6] : null)
-                .conflictResolver(parts.length > 7 && !"null".equals(parts[7]) ? parts[7] : null)
-                .build();
-        
-        return request;
+        try {
+            log.debug("[DynamicHashAllocator] Deserializing join request: {}", content);
+            String[] parts = content.split("\\|");
+            
+            if (parts.length < 5) {
+                throw new IllegalArgumentException("Invalid join request format, expected at least 5 parts, got: " + parts.length);
+            }
+            
+            NodeJoinRequest.NodeJoinRequestBuilder builder = NodeJoinRequest.builder()
+                    .nodeUrl(parts[0])
+                    .phase(NodeJoinRequest.Phase.valueOf(parts[1]))
+                    .proposedHash("null".equals(parts[2]) ? null : Integer.parseInt(parts[2]))
+                    .timestamp(Long.parseLong(parts[3]))
+                    .priority(Integer.parseInt(parts[4]));
+                    
+            // Handle optional fields with bounds checking
+            if (parts.length > 5 && !"null".equals(parts[5])) {
+                builder.accepted(Boolean.parseBoolean(parts[5]));
+            }
+            if (parts.length > 6 && !"null".equals(parts[6])) {
+                builder.respondingNode(parts[6]);
+            }
+            if (parts.length > 7 && !"null".equals(parts[7])) {
+                builder.conflictResolver(parts[7]);
+            }
+            
+            NodeJoinRequest request = builder.build();
+            
+            // If conflictResolver is not provided, generate it
+            if (request.getConflictResolver() == null) {
+                request.setConflictResolver(request.generateConflictResolver());
+                log.debug("[DynamicHashAllocator] Generated conflict resolver: {}", request.getConflictResolver());
+            }
+            
+            log.debug("[DynamicHashAllocator] Successfully deserialized join request: Phase={}, Node={}, Hash={}, ConflictResolver={}", 
+                     request.getPhase(), request.getNodeUrl(), request.getProposedHash(), request.getConflictResolver());
+            return request;
+        } catch (Exception e) {
+            log.error("[DynamicHashAllocator] Failed to deserialize join request: {}", content);
+            log.error("[DynamicHashAllocator] Deserialization error: {}", e.getMessage(), e);
+            throw new RuntimeException("Failed to deserialize NodeJoinRequest: " + content, e);
+        }
     }
     
     /**
