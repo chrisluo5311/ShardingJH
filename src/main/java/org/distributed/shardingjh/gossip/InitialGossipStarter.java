@@ -103,6 +103,17 @@ public class InitialGossipStarter implements ApplicationRunner {
         // Other nodes may have removed us from their finger tables due to previous failures
         log.info("[sendInitialGossip] Sending gossip to announce node {} (hash: {}) is online", CURRENT_NODE_URL, currentNodeHash);
         
+        // Verify current node is in finger table before sending gossip
+        log.info("[sendInitialGossip] Current finger table before sending gossip: {}", fingerTable.finger);
+        if (!fingerTable.finger.containsValue(CURRENT_NODE_URL)) {
+            log.warn("[sendInitialGossip] Current node {} not found in finger table, this may cause issues!", CURRENT_NODE_URL);
+            // If for some reason current node is not in finger table, add it
+            if (currentNodeHash != null) {
+                fingerTable.finger.put(currentNodeHash, CURRENT_NODE_URL);
+                log.info("[sendInitialGossip] Force-added current node to finger table: {} -> {}", currentNodeHash, CURRENT_NODE_URL);
+            }
+        }
+        
         // Create gossip message with unique identifier
         GossipMsg gossipMsg = GossipMsg.builder()
                 .msgType(GossipMsg.Type.HOST_ADD)
@@ -110,6 +121,8 @@ public class InitialGossipStarter implements ApplicationRunner {
                 .senderId(CURRENT_NODE_URL)
                 .timestamp(String.valueOf(System.currentTimeMillis()))
                 .build();
+
+        log.info("[sendInitialGossip] Sending HOST_ADD message with content: {}", gossipMsg.getMsgContent());
 
         // Send gossip message to 2 random selections of neighbors
         int round = 2;

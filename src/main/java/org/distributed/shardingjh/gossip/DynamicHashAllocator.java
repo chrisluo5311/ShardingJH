@@ -271,12 +271,16 @@ public class DynamicHashAllocator {
         
         // ⏰ Wait for acknowledgment collection period
         log.info("[DynamicHashAllocator] Waiting for network node to confirm proposal...");
+        log.info("[DynamicHashAllocator] Request ID: {}, waiting for confirmations from {} nodes", requestId, allNodes.size());
         Thread.sleep(RESERVATION_TIMEOUT_MS); // 10 seconds
         
         // 📊 Check acknowledgment result
         Set<String> confirmations = proposalAcknowledgments.get(requestId);
         int totalNodes = allNodes.size();
         int confirmationCount = confirmations != null ? confirmations.size() : 0;
+        
+        log.info("[DynamicHashAllocator] After waiting period - RequestID: {}, Confirmations received: {}, Total nodes: {}", 
+                requestId, confirmations != null ? confirmations : "null", totalNodes);
         
         // Handle single-node network case
         int majorityThreshold;
@@ -502,14 +506,28 @@ public class DynamicHashAllocator {
         }
         
         String requestId = request.generateConflictResolver();
+        log.debug("[DynamicHashAllocator] Looking for request ID: {}", requestId);
+        
         Set<String> confirmations = proposalAcknowledgments.get(requestId);
         
-        if (confirmations != null && accepted != null && accepted) {
-            confirmations.add(respondingNode);
-            log.info("[DynamicHashAllocator] ✅ Added confirmation from {}, current confirmation count: {}", 
-                    respondingNode, confirmations.size());
+        if (confirmations == null) {
+            log.warn("[DynamicHashAllocator] No pending request found for requestId: {}, available requests: {}", 
+                    requestId, proposalAcknowledgments.keySet());
+            return;
+        }
+        
+        if (accepted != null && accepted) {
+            boolean added = confirmations.add(respondingNode);
+            if (added) {
+                log.info("[DynamicHashAllocator] ✅ Added confirmation from {}, current confirmation count: {}/{}", 
+                        respondingNode, confirmations.size(), confirmations);
+            } else {
+                log.debug("[DynamicHashAllocator] Duplicate confirmation from {}, ignoring", respondingNode);
+            }
         } else if (accepted != null && !accepted) {
-            log.warn("[DynamicHashAllocator] ❌ Received rejection from {}", respondingNode);
+            log.warn("[DynamicHashAllocator] ❌ Received rejection from {} for hash {}", respondingNode, request.getProposedHash());
+        } else {
+            log.warn("[DynamicHashAllocator] Received invalid confirmation reply from {} - accepted field is null", respondingNode);
         }
     }
     
