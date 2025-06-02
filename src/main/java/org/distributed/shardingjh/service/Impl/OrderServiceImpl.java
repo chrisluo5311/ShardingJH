@@ -2,7 +2,6 @@ package org.distributed.shardingjh.service.Impl;
 
 import jakarta.annotation.Resource;
 import jakarta.persistence.EntityManager;
-import jakarta.persistence.EntityManagerFactory;
 import jakarta.persistence.PersistenceContext;
 import lombok.extern.slf4j.Slf4j;
 import org.distributed.shardingjh.context.ShardContext;
@@ -14,21 +13,21 @@ import org.distributed.shardingjh.service.OrderService;
 import org.distributed.shardingjh.sharding.Impl.RangeStrategy;
 import org.springframework.beans.BeanUtils;
 import org.springframework.dao.CannotAcquireLockException;
-import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.orm.jpa.JpaSystemException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.TransactionStatus;
-import org.springframework.transaction.annotation.Transactional;
-import org.springframework.transaction.interceptor.TransactionAspectSupport;
 import org.springframework.transaction.support.DefaultTransactionDefinition;
+import org.sqlite.SQLiteException;
 
+import java.sql.SQLException;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.atomic.AtomicBoolean;
 
 @Slf4j
 @Service
@@ -39,6 +38,9 @@ public class OrderServiceImpl implements OrderService {
 
     @Resource
     private OrderRepository orderRepository;
+
+    // For testing MVCC concurrency conflict
+    private static final AtomicBoolean firstFailureSimulated = new AtomicBoolean(false);
 
     // EntityManager is used to interact with the persistence context (i.e., to perform database operations like queries, inserts, updates, and deletes).
     // Each EntityManager instance represents a single unit of work and should be closed after use to release resources.
@@ -139,15 +141,15 @@ public class OrderServiceImpl implements OrderService {
     public OrderTable updateWithRetryAndRollback(OrderTable toUpdateOrder) {
         String orderId = toUpdateOrder.getId().getOrderId();
         log.info("[Manual TX] Start transactional update for: {}", orderId);
-        // Shard routing
-        String shardKey = rangeStrategy.resolveShard(toUpdateOrder.getCreateTime());
-        log.info("Routing order {} to shard {}", orderId, shardKey);
-        ShardContext.setCurrentShard(shardKey);
 
         // Reason for multiple attempts:
         // To generate MVCC DB_CONFLICT error because the first attempt will fail due to sqlite "DB locked"
         int maxRetries = 3;
         for (int attempt = 1; attempt <= maxRetries; attempt++) {
+            // Shard routing
+            String shardKey = rangeStrategy.resolveShard(toUpdateOrder.getCreateTime());
+            log.info("Routing order {} to shard {}", orderId, shardKey);
+            ShardContext.setCurrentShard(shardKey);
             // Creates a new transaction definition object,
             // allowing you to customize transaction properties (like propagation, isolation, etc.)
             DefaultTransactionDefinition def = new DefaultTransactionDefinition();
@@ -178,35 +180,36 @@ public class OrderServiceImpl implements OrderService {
 
                 // Insert new version
                 int nextVersion = actualVersion + 1;
-                toUpdateOrder.setId(new OrderKey(orderId, nextVersion));
-                toUpdateOrder.setExpiredAt(null);
-                toUpdateOrder.setIsDeleted(0);
-                em.persist(toUpdateOrder);
+                OrderTable copiedOrder = new OrderTable();
+                BeanUtils.copyProperties(toUpdateOrder, copiedOrder);
+                copiedOrder.setId(new OrderKey(orderId, nextVersion));
+                copiedOrder.setExpiredAt(null);
+                copiedOrder.setIsDeleted(0);
+                em.persist(copiedOrder);
+                log.info("Older version expired, new version set to {}", nextVersion);
 
                 // [Comment out if not test] Test MVCC
                 // only the first thread that reaches this line triggers the failure,
                 // allowing the second thread to retry and hit a version mismatch
-//                if (firstFailureSimulated.compareAndExchange(false, true)) {
-//                    throw new RuntimeException("Simulated failure 🤯");
+//                if (attempt == 1 && firstFailureSimulated.compareAndSet(false, true)) {
+//                    throw new RuntimeException("Simulated failure ");
 //                }
 
                 // // [Comment out if not test] Test rollback
 //                if (attempt == 1) {
-//                    throw new RuntimeException("Simulated failure 🤯");
+//                    throw new RuntimeException("Simulated failure ");
 //                }
 
                 txManager.commit(status); // Success
                 log.info("Transaction committed on attempt {}", attempt);
                 return toUpdateOrder;
-            } catch (CannotAcquireLockException e) {
-                txManager.rollback(status);
-                em.close();
+            } catch (CannotAcquireLockException | JpaSystemException e) {
                 log.warn("DB locked. Attempt {}/{} failed. Retrying...", attempt, maxRetries);
                 sleep(attempt * 100L);
-            } catch (Exception e) {
                 txManager.rollback(status);
-                em.close();
+            } catch (Exception e) {
                 log.error("Rolling back transaction due to: {}", e.getMessage());
+                txManager.rollback(status);
                 throw e; // Re-throw for controller to catch
             } finally {
                 em.close();
