@@ -25,6 +25,12 @@ public class GossipService {
     @Resource
     GossipSender gossipSender;
 
+    @Resource
+    DynamicHashAllocator dynamicHashAllocator;
+
+    @Resource
+    BootstrapService bootstrapService;
+
     @Value("${router.server-url}")
     private String CURRENT_NODE_URL;
 
@@ -116,6 +122,24 @@ public class GossipService {
                     } else {
                         log.info("[GossipService] No changes to finger table, not propagating to avoid gossip storm");
                     }
+                    }
+                    break;
+                case NODE_JOIN:
+                case HASH_PROPOSAL:
+                case HASH_PROPOSAL_ACK:
+                case HASH_CONFIRMATION: {
+                    // Handle dynamic hash allocation related messages
+                    log.info("[GossipService] Received dynamic hash allocation message: {}", message.getMsgType());
+                    
+                    // Special handling for bootstrap announcements
+                    if (message.getMsgType() == GossipMsg.Type.NODE_JOIN && 
+                        message.getMsgContent().startsWith("BOOTSTRAP:")) {
+                        String bootstrapNode = message.getMsgContent().substring("BOOTSTRAP:".length());
+                        bootstrapService.handleBootstrapAnnouncement(bootstrapNode);
+                    } else {
+                        dynamicHashAllocator.handleHashAllocationGossip(message);
+                    }
+                    // These messages don't need further propagation, as DynamicHashAllocator handles propagation logic
                     }
                     break;
             }
