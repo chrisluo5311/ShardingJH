@@ -37,6 +37,9 @@ public class DynamicHashAllocator {
     @Resource
     private BootstrapService bootstrapService;
     
+    @Resource
+    private HashAllocationHTTPClient httpClient;
+    
     @Value("${router.server-url}")
     private String CURRENT_NODE_URL;
     
@@ -261,24 +264,36 @@ public class DynamicHashAllocator {
         // Initialize acknowledgment collector
         proposalAcknowledgments.put(requestId, ConcurrentHashMap.newKeySet());
         
-        // Send proposal gossip
-        GossipMsg proposalGossip = GossipMsg.builder()
-                .msgType(GossipMsg.Type.HASH_PROPOSAL)
-                .msgContent(serializeJoinRequest(proposalRequest))
-                .senderId(CURRENT_NODE_URL)
-                .timestamp(String.valueOf(System.currentTimeMillis()))
-                .build();
-        
         // Use all known nodes for proposal sending
         log.info("[DynamicHashAllocator] Sending proposal to all known nodes: {}", allNodes);
         
-        if (!allNodes.isEmpty()) {
-            gossipService.sendToAllNodes(proposalGossip, allNodes);
-        } else {
-            log.warn("[DynamicHashAllocator] No nodes found for proposal, using finger table only");
-            allNodes = new ArrayList<>(fingerTable.finger.values());
-            gossipService.sendToAllNodes(proposalGossip, allNodes);
+        // Send HTTP proposals to all nodes and collect responses immediately
+        int acceptedCount = 0;
+        
+        for (String nodeUrl : allNodes) {
+            try {
+                log.info("[DynamicHashAllocator] 🌐 Sending HTTP proposal to node: {}", nodeUrl);
+                HashAllocationHTTPClient.ProposalResponse response = 
+                    httpClient.sendHashProposalWithRetries(nodeUrl, proposalRequest, 3);
+                
+                if (response.isAccepted()) {
+                    acceptedCount++;
+                    log.info("[DynamicHashAllocator] ✅ Node {} accepted the proposal", nodeUrl);
+                    
+                    // Add to confirmation collector for compatibility
+                    Set<String> confirmations = proposalAcknowledgments.get(requestId);
+                    if (confirmations != null) {
+                        confirmations.add(response.getRespondingNode());
+                    }
+                } else {
+                    log.warn("[DynamicHashAllocator] ❌ Node {} rejected the proposal: {}", nodeUrl, response.getReason());
+                }
+            } catch (Exception e) {
+                log.error("[DynamicHashAllocator] Failed to send proposal to {}: {}", nodeUrl, e.getMessage());
+            }
         }
+        
+        log.info("[DynamicHashAllocator] 📊 HTTP Proposal results: {}/{} nodes accepted", acceptedCount, allNodes.size());
         
         // ⏰ Wait for acknowledgment collection period
         log.info("[DynamicHashAllocator] Waiting for network node to confirm proposal...");
@@ -376,14 +391,20 @@ public class DynamicHashAllocator {
         log.info("[DynamicHashAllocator] 🎉 Obtained enough confirmation, enter CONFIRMATION phase");
         proposalRequest.setPhase(NodeJoinRequest.Phase.CONFIRMATION);
         
-        GossipMsg confirmationGossip = GossipMsg.builder()
-                .msgType(GossipMsg.Type.HASH_CONFIRMATION)
-                .msgContent(serializeJoinRequest(proposalRequest))
-                .senderId(CURRENT_NODE_URL)
-                .timestamp(String.valueOf(System.currentTimeMillis()))
-                .build();
-        
-        gossipService.randomSendGossip(confirmationGossip, allNodes);
+        // Send HTTP confirmations to all nodes
+        log.info("[DynamicHashAllocator] 🌐 Sending HTTP confirmations to all nodes");
+        for (String nodeUrl : allNodes) {
+            try {
+                boolean success = httpClient.sendHashConfirmation(nodeUrl, proposalRequest);
+                if (success) {
+                    log.info("[DynamicHashAllocator] ✅ Successfully sent confirmation to {}", nodeUrl);
+                } else {
+                    log.warn("[DynamicHashAllocator] ⚠️ Failed to send confirmation to {}", nodeUrl);
+                }
+            } catch (Exception e) {
+                log.error("[DynamicHashAllocator] Error sending confirmation to {}: {}", nodeUrl, e.getMessage());
+            }
+        }
         
         // Clean up temporary data
         cleanup(requestId, proposedHash);
@@ -733,5 +754,74 @@ public class DynamicHashAllocator {
             }
             return expired;
         });
+    }
+    
+    /**
+     * Process hash proposal via HTTP (more reliable than UDP)
+     * @param request Hash proposal request
+     * @return Proposal result
+     */
+    public org.distributed.shardingjh.controller.hashallocation.HashAllocationController.ProposalResult 
+           processHashProposalHTTP(NodeJoinRequest request) {
+        Integer hash = request.getProposedHash();
+        String requesterNode = request.getNodeUrl();
+        log.info("[DynamicHashAllocator] 📥 Processing HTTP hash proposal: {} from: {}", hash, requesterNode);
+        
+        boolean accepted = false;
+        String reason = "";
+        
+        NodeJoinRequest existingRequest = hashReservations.get(hash);
+        if (existingRequest == null) {
+            // ✅ No conflict, accept reservation
+            hashReservations.put(hash, request);
+            accepted = true;
+            reason = "No conflict, accept proposal";
+            log.info("[DynamicHashAllocator] ✅ Accepted HTTP hash proposal: {}", hash);
+        } else if (existingRequest.getNodeUrl().equals(requesterNode)) {
+            // ✅ Same node request, accept
+            accepted = true;
+            reason = "Same node request, accept";
+            log.info("[DynamicHashAllocator] ✅ Repeat HTTP request, accept hash proposal: {}", hash);
+        } else {
+            // ⚔️ Conflict, compare priority
+            if (shouldYieldToConflictingRequest(request)) {
+                hashReservations.put(hash, request);  // Yield to higher priority
+                accepted = true;
+                reason = "Yield to higher priority request";
+                log.info("[DynamicHashAllocator] 🔄 HTTP Conflict resolution: Yield to higher priority request");
+            } else {
+                accepted = false;
+                reason = "Conflict with higher priority request";
+                log.info("[DynamicHashAllocator] 🛡️ HTTP Conflict resolution: Reject, keep current reservation");
+            }
+        }
+        
+        return new org.distributed.shardingjh.controller.hashallocation.HashAllocationController.ProposalResult(
+            accepted, reason, CURRENT_NODE_URL);
+    }
+    
+    /**
+     * Process hash confirmation via HTTP
+     * @param request Hash confirmation request
+     */
+    public void processHashConfirmationHTTP(NodeJoinRequest request) {
+        Integer hash = request.getProposedHash();
+        String nodeUrl = request.getNodeUrl();
+        
+        log.info("[DynamicHashAllocator] Processing HTTP hash confirmation for hash: {} from node: {}", hash, nodeUrl);
+        
+        // Check for hash conflicts before adding
+        String existingNode = fingerTable.finger.get(hash);
+        if (existingNode != null && !existingNode.equals(nodeUrl)) {
+            log.error("[DynamicHashAllocator] HASH CONFLICT DETECTED! Hash {} already occupied by {} but requested by {}", 
+                     hash, existingNode, nodeUrl);
+            throw new RuntimeException("Hash conflict detected: " + hash + " already occupied by " + existingNode);
+        }
+        
+        // Official addition to finger table
+        fingerTable.finger.put(hash, nodeUrl);
+        hashReservations.remove(hash);
+        
+        log.info("[DynamicHashAllocator] Added node to finger table via HTTP: {} -> {}", hash, nodeUrl);
     }
 } 
