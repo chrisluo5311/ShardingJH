@@ -41,15 +41,19 @@ public class GossipService {
      *
      * */
     public void msgHandle(GossipMsg message) {
-        // Check if the message has already been received (e.g., "HOST_ADD_64=http://18.222.111.89:8081")
-        String msgKey = message.getMsgType() + "_" + message.getMsgContent();
+        // Use senderId + timestamp for duplicate detection instead of message content
+        // This allows same content messages from different senders or different times to be processed
+        String msgKey = message.getSenderId() + "_" + message.getTimestamp() + "_" + message.getMsgType();
         log.info("[GossipService] Received gossip message key: {}", msgKey);
+        
+        // Check for duplicate based on sender + timestamp + type
         Integer count = msgCache.getOrDefault(msgKey, 0);
         if (count >= 1) {
-            log.info("[GossipService] Duplicate gossip message received, ignoring: {}", msgKey);
+            log.info("[GossipService] Duplicate gossip message received (same sender+timestamp), ignoring: {}", msgKey);
             return;
         }
         msgCache.put(msgKey, count + 1);
+        
         if (msgCache.size() > CACHE_SIZE_LIMIT) {
             msgCache.clear();
         }
@@ -61,11 +65,19 @@ public class GossipService {
                 case HOST_DOWN: {
                     // Remove host from finger table
                     int hash = Integer.parseInt(message.getMsgContent());
-                    fingerTable.finger.remove(hash);
-                    gossipMsg = GossipMsg.builder()
-                                        .msgType(GossipMsg.Type.HOST_DOWN)
-                                        .msgContent(fingerTable.finger.toString())
-                                        .build();
+                    String removedUrl = fingerTable.finger.remove(hash);
+                    if (removedUrl != null) {
+                        log.info("[GossipService] Removed host from finger table: {}={}", hash, removedUrl);
+                        // Propagate with original sender info to maintain proper duplicate detection
+                        gossipMsg = GossipMsg.builder()
+                                            .msgType(GossipMsg.Type.HOST_DOWN)
+                                            .msgContent(fingerTable.finger.toString())
+                                            .senderId(message.getSenderId())  // Keep original sender
+                                            .timestamp(message.getTimestamp())  // Keep original timestamp
+                                            .build();
+                    } else {
+                        log.info("[GossipService] Host {} was not in finger table, no changes made", hash);
+                    }
                     }
                     break;
                 case HOST_ADD: {
@@ -74,6 +86,7 @@ public class GossipService {
                     log.info("[GossipService] Received HOST_ADD gossip message: {}", message.getMsgContent());
                     String cleaned = message.getMsgContent().replaceAll("[\\{\\} ]", "");
                     String[] parts = cleaned.split(",");
+                    boolean addedAnyNode = false;
                     for (String part: parts) {
                         String[] eachParts = part.split("=");
                         int hash = Integer.parseInt(eachParts[0]);
@@ -81,16 +94,35 @@ public class GossipService {
                         if (!fingerTable.finger.containsKey(hash)) {
                             fingerTable.addEntry(hash,address);
                             log.info("[GossipService] Added host to finger table: {}={}", hash, address);
+                            addedAnyNode = true;
+                        } else if (!fingerTable.finger.get(hash).equals(address)) {
+                            // Update if the address changed for the same hash
+                            fingerTable.finger.put(hash, address);
+                            log.info("[GossipService] Updated host in finger table: {}={}", hash, address);
+                            addedAnyNode = true;
                         }
                     }
-                    gossipMsg = GossipMsg.builder()
-                                        .msgType(GossipMsg.Type.HOST_ADD)
-                                        .msgContent(fingerTable.finger.toString())
-                                        .build();
+                    
+                    // Only propagate if we actually made changes to our finger table
+                    if (addedAnyNode) {
+                        // Propagate with original sender info to maintain proper duplicate detection
+                        gossipMsg = GossipMsg.builder()
+                                            .msgType(GossipMsg.Type.HOST_ADD)
+                                            .msgContent(fingerTable.finger.toString())
+                                            .senderId(message.getSenderId())  // Keep original sender
+                                            .timestamp(message.getTimestamp())  // Keep original timestamp
+                                            .build();
+                        log.info("[GossipService] Made changes to finger table, propagating: {}", fingerTable.finger);
+                    } else {
+                        log.info("[GossipService] No changes to finger table, not propagating to avoid gossip storm");
+                    }
                     }
                     break;
             }
-            randomSendGossip(gossipMsg, new ArrayList<>(fingerTable.finger.values()));
+            
+            if (gossipMsg != null) {
+                randomSendGossip(gossipMsg, new ArrayList<>(fingerTable.finger.values()));
+            }
         } catch (Exception e) {
             log.error("[GossipService] Failed to handle gossip message: {}", e.getMessage());
         }
