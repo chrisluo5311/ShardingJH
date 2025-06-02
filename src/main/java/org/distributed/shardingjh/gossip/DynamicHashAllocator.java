@@ -13,6 +13,7 @@ import java.util.concurrent.ScheduledExecutorService;
 import org.distributed.shardingjh.common.constant.ShardConst;
 import org.distributed.shardingjh.p2p.FingerTable;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
 
 import jakarta.annotation.Resource;
@@ -29,6 +30,7 @@ public class DynamicHashAllocator {
     private FingerTable fingerTable;
     
     @Resource
+    @Lazy
     private GossipService gossipService;
     
     @Resource

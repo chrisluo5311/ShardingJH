@@ -7,6 +7,7 @@ import java.util.concurrent.ConcurrentHashMap;
 
 import org.distributed.shardingjh.p2p.FingerTable;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
 
 import jakarta.annotation.Resource;
@@ -26,9 +27,11 @@ public class GossipService {
     GossipSender gossipSender;
 
     @Resource
+    @Lazy
     DynamicHashAllocator dynamicHashAllocator;
 
     @Resource
+    @Lazy
     BootstrapService bootstrapService;
 
     @Value("${router.server-url}")

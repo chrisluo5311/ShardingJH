@@ -12,6 +12,7 @@ import org.distributed.shardingjh.gossip.GossipMsg;
 import org.distributed.shardingjh.gossip.GossipService;
 import org.distributed.shardingjh.p2p.FingerTable;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -43,6 +44,7 @@ public class heartBeatReceiver {
     private FingerTable fingerTable;
 
     @Resource
+    @Lazy
     private GossipService gossipService;
 
     // Store last heartbeat time for each node

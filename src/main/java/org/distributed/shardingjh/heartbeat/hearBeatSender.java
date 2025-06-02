@@ -11,6 +11,7 @@ import org.distributed.shardingjh.gossip.GossipService;
 import org.distributed.shardingjh.p2p.FingerTable;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.web.client.RestTemplateBuilder;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
@@ -39,6 +40,7 @@ public class hearBeatSender {
     private FingerTable fingerTable;
 
     @Resource
+    @Lazy
     private GossipService gossipService;
 
     @Value("${router.server-url}")
