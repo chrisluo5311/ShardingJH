@@ -51,6 +51,10 @@ public class heartBeatReceiver {
     @Lazy
     private org.distributed.shardingjh.gossip.BootstrapService bootstrapService;
 
+    @Resource
+    @Lazy
+    private org.distributed.shardingjh.gossip.DynamicHashAllocator dynamicHashAllocator;
+
     // Store last heartbeat time for each node
     private final ConcurrentHashMap<String, String> nodeLastHeartbeat = new ConcurrentHashMap<>();
 
@@ -81,6 +85,12 @@ public class heartBeatReceiver {
             if (bootstrapService.isNodeFailed(fromNode)) {
                 bootstrapService.markNodeAsActive(fromNode);
                 log.info("[HeartBeat] Node {} recovered from failure, marked as active", fromNode);
+            }
+            
+            // Notify hash allocator of new node discovery (if current node is in temporary single node mode)
+            if (dynamicHashAllocator.isInTemporarySingleNodeMode()) {
+                log.info("[HeartBeat] 🔔 Notifying hash allocator of new node discovery from heartbeat: {}", fromNode);
+                dynamicHashAllocator.notifyNodeDiscovered(fromNode);
             }
             
             // Build response

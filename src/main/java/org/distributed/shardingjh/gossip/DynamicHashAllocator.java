@@ -10,6 +10,7 @@ import java.util.TreeMap;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 
 import org.distributed.shardingjh.common.constant.ShardConst;
 import org.distributed.shardingjh.p2p.FingerTable;
@@ -54,8 +55,16 @@ public class DynamicHashAllocator {
     
     private final ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(1);
     
+    // Anti-isolation retry scheduler
+    private final ScheduledExecutorService isolationPreventionScheduler = Executors.newScheduledThreadPool(1);
+    
+    // Whether in temporary single node mode (waiting for other nodes to join)
+    private volatile boolean isTemporarySingleNode = false;
+    
     private static final long RESERVATION_TIMEOUT_MS = 10000; // 10 second timeout
     private static final long CONFIRMATION_TIMEOUT_MS = 5000;  // 5 second confirmation timeout
+    private static final long ISOLATION_PREVENTION_INTERVAL_MS = 15000; // Check every 15 seconds
+    private static final long TEMPORARY_SINGLE_NODE_TIMEOUT_MS = 60000; // Consider as true single node after 60 seconds
     
     /**
      * Start dynamic hash allocation process
@@ -233,11 +242,40 @@ public class DynamicHashAllocator {
         
         // Check if this is truly a single-node network (no other known nodes)
         if (allNodes.isEmpty()) {
-            log.info("[DynamicHashAllocator] 🏁 Single node network detected (no known nodes), direct allocation without confirmation");
-            fingerTable.finger.put(proposedHash, CURRENT_NODE_URL);
-            bootstrapService.unregisterBootstrapNode();
-            log.info("[DynamicHashAllocator] 🚀 Successfully allocated hash: {} to node: {} (single node mode)", proposedHash, CURRENT_NODE_URL);
-            return proposedHash;
+            log.info("[DynamicHashAllocator] 🤔 No other nodes detected. Checking if this is temporary isolation...");
+            
+            // First time detecting no other nodes, start anti-isolation mechanism
+            if (!isTemporarySingleNode) {
+                log.info("[DynamicHashAllocator] 🚨 Starting isolation prevention mechanism");
+                isTemporarySingleNode = true;
+                startIsolationPreventionScheduler();
+                
+                // Wait for a while to give other nodes a chance to start
+                log.info("[DynamicHashAllocator] ⏳ Waiting {}ms for other nodes to come online...", TEMPORARY_SINGLE_NODE_TIMEOUT_MS);
+                Thread.sleep(TEMPORARY_SINGLE_NODE_TIMEOUT_MS);
+                
+                // Re-check if there are other nodes
+                allNodes = bootstrapService.getAllKnownNodes();
+                if (!allNodes.isEmpty()) {
+                    log.info("[DynamicHashAllocator] 🎉 Other nodes detected after waiting! Proceeding with normal allocation");
+                    isTemporarySingleNode = false;
+                    // Continue with normal hash allocation process
+                } else {
+                    log.info("[DynamicHashAllocator] ⚠️ Still no other nodes after waiting. Entering temporary single node mode");
+                    // Allocate temporary hash but continue monitoring
+                    fingerTable.finger.put(proposedHash, CURRENT_NODE_URL);
+                    bootstrapService.unregisterBootstrapNode();
+                    log.info("[DynamicHashAllocator] 🚀 Temporarily allocated hash: {} to node: {} (monitoring for other nodes)", 
+                             proposedHash, CURRENT_NODE_URL);
+                    return proposedHash;
+                }
+            } else {
+                // Already in temporary single node mode, return directly
+                log.info("[DynamicHashAllocator] 📍 Already in temporary single node mode");
+                fingerTable.finger.put(proposedHash, CURRENT_NODE_URL);
+                bootstrapService.unregisterBootstrapNode();
+                return proposedHash;
+            }
         }
         
         // Check if local conflict exists
@@ -823,5 +861,194 @@ public class DynamicHashAllocator {
         hashReservations.remove(hash);
         
         log.info("[DynamicHashAllocator] Added node to finger table via HTTP: {} -> {}", hash, nodeUrl);
+    }
+    
+    /**
+     * Start isolation prevention scheduler to check for other nodes periodically
+     */
+    private void startIsolationPreventionScheduler() {
+        log.info("[DynamicHashAllocator] 🔄 Starting isolation prevention scheduler");
+        
+        isolationPreventionScheduler.scheduleAtFixedRate(() -> {
+            try {
+                if (isTemporarySingleNode) {
+                    log.info("[DynamicHashAllocator] 🔍 Checking for other nodes to prevent isolation...");
+                    
+                    // Rediscover network state
+                    List<String> discoveredNodes = rediscoverNetwork();
+                    
+                    if (!discoveredNodes.isEmpty()) {
+                        log.info("[DynamicHashAllocator] 🎉 Discovered other nodes: {}. Rejoining network!", discoveredNodes);
+                        rejoinNetwork();
+                    } else {
+                        log.debug("[DynamicHashAllocator] 🔍 Still no other nodes found, continuing to monitor...");
+                    }
+                }
+            } catch (Exception e) {
+                log.error("[DynamicHashAllocator] Error in isolation prevention: {}", e.getMessage(), e);
+            }
+        }, ISOLATION_PREVENTION_INTERVAL_MS, ISOLATION_PREVENTION_INTERVAL_MS, TimeUnit.MILLISECONDS);
+    }
+    
+    /**
+     * Rediscover other nodes in the network using HTTP (more reliable than UDP)
+     */
+    private List<String> rediscoverNetwork() {
+        // Re-register as bootstrap node
+        bootstrapService.registerBootstrapNode();
+        
+        // Send HTTP health check requests to configured nodes
+        Set<String> configuredNodes = new HashSet<>(); 
+        for (String entry : bootstrapService.getConfiguredEntries()) {
+            String[] parts = entry.split("=");
+            if (parts.length == 2) {
+                String nodeUrl = parts[1];
+                if (!nodeUrl.equals(CURRENT_NODE_URL)) {
+                    configuredNodes.add(nodeUrl);
+                }
+            }
+        }
+        
+        log.info("[DynamicHashAllocator] 🌐 Sending HTTP health checks to configured nodes: {}", configuredNodes);
+        
+        // Send HTTP health checks to configured nodes
+        for (String nodeUrl : configuredNodes) {
+            try {
+                log.info("[DynamicHashAllocator] 📡 Checking node availability via HTTP: {}", nodeUrl);
+                
+                // Try simple health check first
+                boolean isHealthy = performSimpleHealthCheck(nodeUrl);
+                
+                if (isHealthy) {
+                    log.info("[DynamicHashAllocator] ✅ Node {} is responsive via HTTP health check", nodeUrl);
+                    // Add to bootstrap service as discovered node
+                    bootstrapService.handleBootstrapAnnouncement(nodeUrl);
+                } else {
+                    log.debug("[DynamicHashAllocator] ❌ Node {} not responsive to health check", nodeUrl);
+                }
+                
+            } catch (Exception e) {
+                log.debug("[DynamicHashAllocator] Node {} not responsive: {}", nodeUrl, e.getMessage());
+            }
+        }
+        
+        // Check if other nodes were discovered
+        List<String> discoveredNodes = bootstrapService.getAllKnownNodes();
+        log.info("[DynamicHashAllocator] 📊 Discovery results: {} nodes found", discoveredNodes.size());
+        return discoveredNodes;
+    }
+    
+    /**
+     * Alternative health check using basic HTTP request
+     */
+    private boolean checkNodeHealthAlternative(String nodeUrl) {
+        try {
+            // Try heartbeat health endpoint
+            log.debug("[DynamicHashAllocator] Trying heartbeat health check for: {}", nodeUrl);
+            return performSimpleHealthCheck(nodeUrl);
+            
+        } catch (Exception e) {
+            log.debug("[DynamicHashAllocator] Alternative health check failed for {}: {}", nodeUrl, e.getMessage());
+            return false;
+        }
+    }
+    
+    /**
+     * Perform simple HTTP health check
+     */
+    private boolean performSimpleHealthCheck(String nodeUrl) {
+        try {
+            String healthUrl = nodeUrl + "/heartbeat/health";
+            
+            org.springframework.http.HttpHeaders headers = new org.springframework.http.HttpHeaders();
+            headers.setContentType(org.springframework.http.MediaType.APPLICATION_JSON);
+            
+            org.springframework.http.HttpEntity<String> request = new org.springframework.http.HttpEntity<>(headers);
+            
+            // Create a simple RestTemplate for this check
+            org.springframework.web.client.RestTemplate restTemplate = new org.springframework.web.client.RestTemplate();
+            org.springframework.http.client.SimpleClientHttpRequestFactory factory = 
+                new org.springframework.http.client.SimpleClientHttpRequestFactory();
+            factory.setConnectTimeout(2000); // 2 seconds
+            factory.setReadTimeout(3000);    // 3 seconds
+            restTemplate.setRequestFactory(factory);
+            
+            org.springframework.http.ResponseEntity<java.util.Map> response = restTemplate.exchange(
+                healthUrl,
+                org.springframework.http.HttpMethod.GET,
+                request,
+                java.util.Map.class
+            );
+            
+            boolean isHealthy = response.getStatusCode() == org.springframework.http.HttpStatus.OK;
+            log.debug("[DynamicHashAllocator] Health check for {}: {}", nodeUrl, isHealthy ? "HEALTHY" : "UNHEALTHY");
+            return isHealthy;
+            
+        } catch (Exception e) {
+            log.debug("[DynamicHashAllocator] Health check failed for {}: {}", nodeUrl, e.getMessage());
+            return false;
+        }
+    }
+    
+    /**
+     * Rejoin the network and reallocate hash
+     */
+    private void rejoinNetwork() {
+        try {
+            log.info("[DynamicHashAllocator] 🔄 Rejoining network and reallocating hash...");
+            
+            // Stop isolation prevention
+            isTemporarySingleNode = false;
+            isolationPreventionScheduler.shutdown();
+            
+            // Clear current hash allocation
+            Integer currentHash = null;
+            for (Map.Entry<Integer, String> entry : fingerTable.finger.entrySet()) {
+                if (entry.getValue().equals(CURRENT_NODE_URL)) {
+                    currentHash = entry.getKey();
+                    break;
+                }
+            }
+            
+            if (currentHash != null) {
+                fingerTable.finger.remove(currentHash);
+                log.info("[DynamicHashAllocator] 🗑️ Removed temporary hash allocation: {}", currentHash);
+            }
+            
+            // Restart hash allocation
+            log.info("[DynamicHashAllocator] 🔄 Starting fresh hash allocation...");
+            allocateHashForCurrentNode();
+            
+        } catch (Exception e) {
+            log.error("[DynamicHashAllocator] Failed to rejoin network: {}", e.getMessage(), e);
+            // If rejoin fails, continue monitoring
+            isTemporarySingleNode = true;
+            startIsolationPreventionScheduler();
+        }
+    }
+    
+    /**
+     * Check if the current node is in temporary single node mode
+     */
+    public boolean isInTemporarySingleNodeMode() {
+        return isTemporarySingleNode;
+    }
+    
+    /**
+     * Notify of new node discovery (called by heartbeat or other services)
+     */
+    public void notifyNodeDiscovered(String nodeUrl) {
+        if (isTemporarySingleNode) {
+            log.info("[DynamicHashAllocator] 🔔 Notified of new node discovery: {}. Triggering rejoin process.", nodeUrl);
+            
+            // Asynchronously trigger the rejoin process
+            scheduler.schedule(() -> {
+                try {
+                    rejoinNetwork();
+                } catch (Exception e) {
+                    log.error("[DynamicHashAllocator] Failed to rejoin network after node discovery: {}", e.getMessage(), e);
+                }
+            }, 1000, TimeUnit.MILLISECONDS); // 1 second delay
+        }
     }
 } 
