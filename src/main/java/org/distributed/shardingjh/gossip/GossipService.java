@@ -8,6 +8,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import org.distributed.shardingjh.p2p.FingerTable;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Lazy;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
 import jakarta.annotation.Resource;
@@ -271,6 +272,25 @@ public class GossipService {
                 log.error("[GossipService] Failed to send gossip message to {}: {}", neighborIp, e.getMessage());
             }
         }
+    }
+
+    /**
+    Periodically broadcast membership info to all nodes
+     */
+    @Scheduled(fixedRate = 15000)
+    public void periodicGossipMembershipInfo() {
+        if (fingerTable.finger.isEmpty()) {
+            log.debug("[GossipService] Finger table is empty, skip periodic gossip.");
+            return;
+        }
+        GossipMsg membershipMsg = GossipMsg.builder()
+                .msgType(GossipMsg.Type.HOST_ADD)
+                .msgContent(fingerTable.finger.toString())
+                .senderId(CURRENT_NODE_URL)
+                .timestamp(String.valueOf(System.currentTimeMillis()))
+                .build();
+        log.info("[GossipService] Periodically broadcasting membership info: {}", fingerTable.finger);
+        randomSendGossip(membershipMsg, new ArrayList<>(fingerTable.finger.values()));
     }
 
     // Send HOSTUP gossip message
