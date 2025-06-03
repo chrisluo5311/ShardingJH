@@ -55,6 +55,9 @@ public class DynamicHashAllocator {
     // Proposal acknowledgment collector, key is requestId, value is list of received confirmations
     private final ConcurrentHashMap<String, Set<String>> proposalAcknowledgments = new ConcurrentHashMap<>();
     
+    // New data structure to track accepted proposals
+    private final ConcurrentHashMap<Integer, String> acceptedProposals = new ConcurrentHashMap<>();
+    
     private final ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(1);
     
     // Anti-isolation retry scheduler
@@ -525,7 +528,7 @@ public class DynamicHashAllocator {
     }
     
     /**
-     * Handle hash proposal (improved version - send confirmation reply)
+     * Handle hash proposal (UDP version)
      */
     private void handleHashProposal(NodeJoinRequest request) {
         Integer hash = request.getProposedHash();
@@ -536,9 +539,16 @@ public class DynamicHashAllocator {
         String reason = "";
         
         NodeJoinRequest existingRequest = hashReservations.get(hash);
-        if (existingRequest == null) {
+        String previouslyAcceptedNode = acceptedProposals.get(hash);
+        
+        if (previouslyAcceptedNode != null && !previouslyAcceptedNode.equals(requesterNode)) {
+            accepted = false;
+            reason = "Hash already accepted by another node: " + previouslyAcceptedNode;
+            log.info("[DynamicHashAllocator] 🛡️ Rejecting hash proposal: {} already accepted by {}", hash, previouslyAcceptedNode);
+        } else if (existingRequest == null) {
             // ✅ No conflict, accept reservation
             hashReservations.put(hash, request);
+            acceptedProposals.put(hash, requesterNode);
             accepted = true;
             reason = "No conflict, accept proposal";
             log.info("[DynamicHashAllocator] ✅ Accepted hash proposal: {}", hash);
@@ -548,12 +558,12 @@ public class DynamicHashAllocator {
             reason = "Same node request, accept";
             log.info("[DynamicHashAllocator] ✅ Repeat request, accept hash proposal: {}", hash);
         } else {
-            // ⚔️ Conflict, compare priority
+            // ⚔️ Conflict, compare priority 
             if (shouldYieldToConflictingRequest(request)) {
-                hashReservations.put(hash, request);  // Yield to higher priority
-                accepted = true;
-                reason = "Yield to higher priority request";
-                log.info("[DynamicHashAllocator] 🔄 Conflict resolution: Yield to higher priority request");
+                hashReservations.put(hash, request);  
+                accepted = false; 
+                reason = "Higher priority request, but hash already accepted by: " + previouslyAcceptedNode;
+                log.info("[DynamicHashAllocator] 🔄 Higher priority request detected, but not changing accepted status");
             } else {
                 accepted = false;
                 reason = "Conflict with higher priority request";
