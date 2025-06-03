@@ -12,7 +12,6 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
-import org.distributed.shardingjh.common.constant.ShardConst;
 import org.distributed.shardingjh.p2p.FingerTable;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Lazy;
@@ -1048,5 +1047,51 @@ public class DynamicHashAllocator {
                 }
             }, 1000, TimeUnit.MILLISECONDS); // 1 second delay
         }
+    }
+    
+    /**
+     * Find an available hash using linear search (simple fallback method)
+     * @param currentTable Current finger table
+     * @return Available hash or null if none found
+     */
+    private Integer findAvailableHashLinear(Map<Integer, String> currentTable) {
+        Set<Integer> reservedHashes = getReservedHashesFromConfig();
+        Set<Integer> unavailableHashes = new HashSet<>(currentTable.keySet());
+        unavailableHashes.addAll(reservedHashes);
+        
+        // Linear search for available hash
+        for (int hash = 32; hash < 256; hash += 32) {
+            if (!unavailableHashes.contains(hash)) {
+                log.info("[DynamicHashAllocator] Found available hash via linear search: {}", hash);
+                return hash;
+            }
+        }
+        
+        log.error("[DynamicHashAllocator] No available hash found via linear search");
+        return null;
+    }
+    
+    /**
+     * Find an available hash using linear search, excluding specified hashes
+     * @param currentTable Current finger table
+     * @param excludedHashes Hashes to exclude from consideration
+     * @return Available hash or null if none found
+     */
+    private Integer findAvailableHashLinearExcluding(Map<Integer, String> currentTable, Set<Integer> excludedHashes) {
+        Set<Integer> reservedHashes = getReservedHashesFromConfig();
+        Set<Integer> unavailableHashes = new HashSet<>(currentTable.keySet());
+        unavailableHashes.addAll(reservedHashes);
+        unavailableHashes.addAll(excludedHashes);
+        
+        // Linear search for available hash
+        for (int hash = 32; hash < 256; hash += 32) {
+            if (!unavailableHashes.contains(hash)) {
+                log.info("[DynamicHashAllocator] Found available hash via linear search (excluding {}): {}", excludedHashes, hash);
+                return hash;
+            }
+        }
+        
+        log.error("[DynamicHashAllocator] No available hash found via linear search excluding: {}", excludedHashes);
+        return null;
     }
 } 
