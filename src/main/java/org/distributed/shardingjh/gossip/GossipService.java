@@ -114,14 +114,30 @@ public class GossipService {
                         String[] eachParts = part.split("=");
                         int hash = Integer.parseInt(eachParts[0]);
                         String address = eachParts[1];
-                        if (!fingerTable.finger.containsKey(hash)) {
-                            fingerTable.addEntry(hash,address);
+                        
+                        // Check for hash conflicts
+                        if (fingerTable.finger.containsKey(hash)) {
+                            String existingAddress = fingerTable.finger.get(hash);
+                            if (!existingAddress.equals(address)) {
+                                // Hash conflict detected!
+                                if (existingAddress.equals(CURRENT_NODE_URL)) {
+                                    log.error("[GossipService] ⚠️ HASH CONFLICT: Hash {} is claimed by both current node {} and remote node {}", 
+                                             hash, CURRENT_NODE_URL, address);
+                                    // Current node has priority if it's already established
+                                    log.warn("[GossipService] Ignoring conflicting hash assignment from {}", address);
+                                    continue; // Skip this conflicting entry
+                                } else {
+                                    log.warn("[GossipService] ⚠️ Hash conflict detected: {} was {} now claims to be {}", 
+                                            hash, existingAddress, address);
+                                    // Update to newer assignment
+                                    fingerTable.finger.put(hash, address);
+                                    addedAnyNode = true;
+                                    log.info("[GossipService] Updated conflicting hash assignment: {}={}", hash, address);
+                                }
+                            }
+                        } else {
+                            fingerTable.addEntry(hash, address);
                             log.info("[GossipService] Added host to finger table: {}={}", hash, address);
-                            addedAnyNode = true;
-                        } else if (!fingerTable.finger.get(hash).equals(address)) {
-                            // Update if the address changed for the same hash
-                            fingerTable.finger.put(hash, address);
-                            log.info("[GossipService] Updated host in finger table: {}={}", hash, address);
                             addedAnyNode = true;
                         }
                     }

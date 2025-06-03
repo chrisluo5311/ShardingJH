@@ -44,6 +44,9 @@ public class DynamicHashAllocator {
     @Value("${router.server-url}")
     private String CURRENT_NODE_URL;
     
+    @Value("${finger.entries}")
+    private String entries;
+    
     // Cache for ongoing hash allocation requests
     private final ConcurrentHashMap<String, NodeJoinRequest> pendingRequests = new ConcurrentHashMap<>();
     
@@ -132,103 +135,98 @@ public class DynamicHashAllocator {
      * Strategy: Find the largest gap between existing nodes and then select the midpoint of the gap
      */
     private Integer findOptimalHashPosition(Map<Integer, String> currentTable, String nodeUrl) {
-        log.info("[DynamicHashAllocator] Phase 2: Finding optimal hash position");
-        log.info("[DynamicHashAllocator] Current finger table: {}", currentTable);
+        log.info("[DynamicHashAllocator] Finding optimal hash position for node: {}", nodeUrl);
+        log.info("[DynamicHashAllocator] Current network finger table: {}", currentTable);
         
-        if (currentTable.isEmpty()) {
-            // First node in the network
-            int firstNodeHash = Math.abs(nodeUrl.hashCode()) % ShardConst.FINGER_MAX_RANGE;
-            log.info("[DynamicHashAllocator] First node in network, using hash: {}", firstNodeHash);
-            return firstNodeHash;
+        // Get all reserved hashes from configuration to avoid conflicts
+        Set<Integer> reservedHashes = getReservedHashesFromConfig();
+        log.info("[DynamicHashAllocator] Reserved hashes from configuration: {}", reservedHashes);
+        
+        // Combine current table hashes with reserved hashes to get all unavailable positions
+        Set<Integer> unavailableHashes = new HashSet<>(currentTable.keySet());
+        unavailableHashes.addAll(reservedHashes);
+        log.info("[DynamicHashAllocator] All unavailable hashes (current + reserved): {}", unavailableHashes);
+        
+        if (unavailableHashes.isEmpty()) {
+            // Network is empty and no config reservations, choose a reasonable starting position
+            int initialHash = 64;
+            log.info("[DynamicHashAllocator] Empty network, selecting initial hash: {}", initialHash);
+            return initialHash;
         }
         
-        List<Integer> sortedHashes = new ArrayList<>(currentTable.keySet());
+        // Find the largest gap between consecutive hashes
+        List<Integer> sortedHashes = new ArrayList<>(unavailableHashes);
         Collections.sort(sortedHashes);
         
         int maxGap = 0;
-        int bestPosition = 0;
+        int bestPosition = -1;
         
-        // Check gaps between adjacent nodes
-        for (int i = 0; i < sortedHashes.size(); i++) {
-            int current = sortedHashes.get(i);
-            int next = (i + 1 < sortedHashes.size()) ? 
-                       sortedHashes.get(i + 1) : 
-                       (sortedHashes.get(0) + ShardConst.FINGER_MAX_RANGE);
+        // Check gap between each consecutive pair
+        for (int i = 0; i < sortedHashes.size() - 1; i++) {
+            int currentHash = sortedHashes.get(i);
+            int nextHash = sortedHashes.get(i + 1);
+            int gap = nextHash - currentHash;
             
-            int gap;
-            if (i + 1 < sortedHashes.size()) {
-                // Normal gap between adjacent nodes
-                gap = next - current;
-            } else {
-                // Wrap-around gap from last node to first node
-                gap = (ShardConst.FINGER_MAX_RANGE - current) + sortedHashes.get(0);
-            }
-            
-            if (gap > maxGap && gap > 1) { // Ensure gap is greater than 1
+            if (gap > maxGap && gap > 1) { // Need at least gap of 2 to fit a new hash
                 maxGap = gap;
-                // Select midpoint of the gap
-                if (i + 1 < sortedHashes.size()) {
-                    bestPosition = current + gap / 2;
-                } else {
-                    // Handle wrap-around case
-                    bestPosition = (current + gap / 2) % ShardConst.FINGER_MAX_RANGE;
-                }
+                bestPosition = currentHash + gap / 2; // Midpoint of the gap
             }
         }
         
-        // If no suitable gap is found, use linear probing
-        if (maxGap <= 1) {
-            bestPosition = findAvailableHashLinear(currentTable);
+        // Check gap after the last hash (wrap-around to 256)
+        int lastHash = sortedHashes.get(sortedHashes.size() - 1);
+        int wrapAroundGap = (256 - lastHash) + sortedHashes.get(0);
+        if (wrapAroundGap > maxGap && wrapAroundGap > 1) {
+            maxGap = wrapAroundGap;
+            bestPosition = (lastHash + wrapAroundGap / 2) % 256;
         }
         
-        log.info("[DynamicHashAllocator] Found optimal position: {} (gap size: {})", bestPosition, maxGap);
+        // Check gap before the first hash (wrap-around from 0)
+        int firstHash = sortedHashes.get(0);
+        if (firstHash > 1 && (firstHash > maxGap)) {
+            maxGap = firstHash;
+            bestPosition = firstHash / 2;
+        }
+        
+        if (bestPosition == -1) {
+            log.error("[DynamicHashAllocator] Could not find suitable hash position! All positions may be occupied.");
+            log.error("[DynamicHashAllocator] Unavailable hashes: {}", unavailableHashes);
+            throw new RuntimeException("Cannot find available hash position - network may be full or misconfigured");
+        }
+        
+        log.info("[DynamicHashAllocator] Selected optimal hash position: {} (gap size: {})", bestPosition, maxGap);
         return bestPosition;
     }
     
     /**
-     * Linear probing to find available hash position
+     * Get all reserved hashes from finger.entries configuration
+     * This prevents dynamic allocation from conflicting with configured nodes
      */
-    private Integer findAvailableHashLinear(Map<Integer, String> currentTable) {
-        return findAvailableHashLinearExcluding(currentTable, new HashSet<>());
-    }
-    
-    /**
-     * Linear probing to find available hash position, excluding specified hashes
-     * @param currentTable Current finger table
-     * @param excludedHashes Hashes to exclude from consideration
-     * @return Available hash or null if none found
-     */
-    private Integer findAvailableHashLinearExcluding(Map<Integer, String> currentTable, Set<Integer> excludedHashes) {
-        // Also exclude hashes from configuration to avoid conflicts
-        Set<Integer> allExcluded = new HashSet<>(excludedHashes);
-        allExcluded.addAll(currentTable.keySet());
+    private Set<Integer> getReservedHashesFromConfig() {
+        Set<Integer> reservedHashes = new HashSet<>();
         
-        // Parse finger.entries configuration to exclude configured hashes
         try {
-            for (String entry : bootstrapService.getConfiguredEntries()) {
-                String[] parts = entry.split("=");
-                if (parts.length == 2) {
-                    Integer configHash = Integer.parseInt(parts[0]);
-                    allExcluded.add(configHash);
-                    log.debug("[findAvailableHashLinearExcluding] Excluding configured hash: {}", configHash);
+            if (entries != null && !entries.trim().isEmpty()) {
+                String[] configEntries = entries.split(",");
+                for (String entry : configEntries) {
+                    String[] parts = entry.trim().split("=");
+                    if (parts.length == 2) {
+                        try {
+                            int hash = Integer.parseInt(parts[0].trim());
+                            reservedHashes.add(hash);
+                            log.debug("[DynamicHashAllocator] Found reserved hash from config: {} -> {}", hash, parts[1].trim());
+                        } catch (NumberFormatException e) {
+                            log.warn("[DynamicHashAllocator] Invalid hash format in config entry: {}", entry);
+                        }
+                    }
                 }
             }
         } catch (Exception e) {
-            log.warn("[findAvailableHashLinearExcluding] Failed to parse configuration: {}", e.getMessage());
+            log.error("[DynamicHashAllocator] Error parsing finger.entries configuration: {}", e.getMessage());
         }
         
-        int start = Math.abs(CURRENT_NODE_URL.hashCode()) % ShardConst.FINGER_MAX_RANGE;
-        for (int i = 0; i < ShardConst.FINGER_MAX_RANGE; i++) {
-            int candidate = (start + i) % ShardConst.FINGER_MAX_RANGE;
-            if (!allExcluded.contains(candidate)) {
-                log.info("[findAvailableHashLinearExcluding] Found available hash {} after {} attempts (excluded: {})", 
-                        candidate, i, allExcluded.size());
-                return candidate;
-            }
-        }
-        log.error("[findAvailableHashLinearExcluding] No available hash found after {} attempts, excluded {} hashes", 
-                ShardConst.FINGER_MAX_RANGE, allExcluded.size());
-        return null;
+        log.info("[DynamicHashAllocator] Total reserved hashes from configuration: {}", reservedHashes.size());
+        return reservedHashes;
     }
     
     /**

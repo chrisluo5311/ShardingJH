@@ -64,18 +64,22 @@ public class InitialGossipStarter implements ApplicationRunner {
                 // Verify config hash is not occupied by a different node
                 String existingNode = fingerTable.finger.get(currentNodeHash);
                 if (existingNode != null && !existingNode.equals(CURRENT_NODE_URL)) {
-                    log.error("[sendInitialGossip] Hash collision detected! Hash {} is configured for current node {} but occupied by {}", 
+                    log.error("[sendInitialGossip] ⚠️ CRITICAL HASH CONFLICT! Hash {} is configured for current node {} but occupied by {}", 
                              currentNodeHash, CURRENT_NODE_URL, existingNode);
-                    throw new RuntimeException("Configuration error: Hash " + currentNodeHash + " is already occupied by " + existingNode);
+                    log.error("[sendInitialGossip] This indicates a serious configuration error. Please check finger.entries configuration.");
+                    log.error("[sendInitialGossip] Current finger table: {}", fingerTable.finger);
+                    throw new RuntimeException("CRITICAL: Hash conflict detected - Hash " + currentNodeHash + 
+                                             " is configured for " + CURRENT_NODE_URL + " but occupied by " + existingNode + 
+                                             ". Please fix configuration and restart.");
                 }
                 fingerTable.finger.put(currentNodeHash, CURRENT_NODE_URL);
-                log.info("[sendInitialGossip] Added current node with hash {} from configuration", currentNodeHash);
+                log.info("[sendInitialGossip] ✅ Added current node with hash {} from configuration", currentNodeHash);
             } else {
                 // Use dynamic hash allocator
                 try {
                     log.info("[sendInitialGossip] No configuration found, using dynamic hash allocation via gossip");
                     currentNodeHash = dynamicHashAllocator.allocateHashForCurrentNode();
-                    log.info("[sendInitialGossip] Dynamic hash allocation completed with hash: {}", currentNodeHash);
+                    log.info("[sendInitialGossip] ✅ Dynamic hash allocation completed with hash: {}", currentNodeHash);
                     // Note: DynamicHashAllocator already adds the node to finger table
                 } catch (InterruptedException e) {
                     log.error("[sendInitialGossip] Dynamic hash allocation was interrupted: {}", e.getMessage());
