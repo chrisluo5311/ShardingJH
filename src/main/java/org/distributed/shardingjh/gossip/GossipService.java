@@ -2,7 +2,9 @@ package org.distributed.shardingjh.gossip;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 import org.distributed.shardingjh.p2p.FingerTable;
@@ -20,6 +22,10 @@ public class GossipService {
     // Message cache for deduplication, key is the unique identifier of the message, value is the receive count
     private final ConcurrentHashMap<String, Integer> msgCache = new ConcurrentHashMap<>();
     private static final int CACHE_SIZE_LIMIT = 1000; // Adjust according to actual needs
+
+    // Track last broadcasted finger table state to avoid unnecessary broadcasts
+    private volatile String lastBroadcastedFingerTable = "";
+    private volatile long lastBroadcastTime = 0;
 
     @Resource
     private FingerTable fingerTable;
@@ -44,6 +50,55 @@ public class GossipService {
     // http://3.15.149.110:8082 => 3.15.149.110
     public String getCurrentIp() {
         return CURRENT_NODE_URL.split(":")[1].replace("//", "");
+    }
+
+    /**
+     * Find hash key by node address in finger table (for duplicate node detection)
+     * @param address Node address to find
+     * @return Hash key or null if not found
+     */
+    private Integer findHashByAddress(String address) {
+        for (Map.Entry<Integer, String> entry : fingerTable.finger.entrySet()) {
+            if (entry.getValue().equals(address)) {
+                return entry.getKey();
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Clean up duplicate node entries in finger table
+     * If a node appears multiple times with different hashes, keep only the first occurrence
+     */
+    public void cleanupDuplicateNodes() {
+        Map<String, Integer> addressToHash = new HashMap<>();
+        List<Integer> hashesToRemove = new ArrayList<>();
+        
+        // Find duplicate addresses
+        for (Map.Entry<Integer, String> entry : fingerTable.finger.entrySet()) {
+            String address = entry.getValue();
+            Integer hash = entry.getKey();
+            
+            if (addressToHash.containsKey(address)) {
+                // Duplicate found, mark for removal (keep the first occurrence)
+                hashesToRemove.add(hash);
+                log.warn("[GossipService] Found duplicate node: {} appears with both hash {} and {}. Removing hash {}.", 
+                        address, addressToHash.get(address), hash, hash);
+            } else {
+                addressToHash.put(address, hash);
+            }
+        }
+        
+        // Remove duplicate entries
+        for (Integer hash : hashesToRemove) {
+            String removedAddress = fingerTable.finger.remove(hash);
+            log.info("[GossipService] Removed duplicate entry: {}={}", hash, removedAddress);
+        }
+        
+        if (!hashesToRemove.isEmpty()) {
+            log.info("[GossipService] Cleanup completed. Removed {} duplicate entries. Current finger table: {}", 
+                    hashesToRemove.size(), fingerTable.finger);
+        }
     }
 
     /**
@@ -110,12 +165,13 @@ public class GossipService {
                     String cleaned = message.getMsgContent().replaceAll("[\\{\\} ]", "");
                     String[] parts = cleaned.split(",");
                     boolean addedAnyNode = false;
+                    
                     for (String part: parts) {
                         String[] eachParts = part.split("=");
                         int hash = Integer.parseInt(eachParts[0]);
                         String address = eachParts[1];
                         
-                        // Check for hash conflicts
+                        // Check for hash conflicts and duplicate node assignments
                         if (fingerTable.finger.containsKey(hash)) {
                             String existingAddress = fingerTable.finger.get(hash);
                             if (!existingAddress.equals(address)) {
@@ -135,7 +191,16 @@ public class GossipService {
                                     log.info("[GossipService] Updated conflicting hash assignment: {}={}", hash, address);
                                 }
                             }
+                            // If existing address equals new address, no change needed
                         } else {
+                            // Check if this node already exists with a different hash (duplicate node detection)
+                            Integer existingHash = findHashByAddress(address);
+                            if (existingHash != null && !existingHash.equals(hash)) {
+                                log.warn("[GossipService] ⚠️ DUPLICATE NODE DETECTED: Node {} already exists with hash {}, ignoring new hash {}", 
+                                        address, existingHash, hash);
+                                continue; // Skip duplicate node assignment
+                            }
+                            
                             fingerTable.addEntry(hash, address);
                             log.info("[GossipService] Added host to finger table: {}={}", hash, address);
                             addedAnyNode = true;
@@ -299,11 +364,28 @@ public class GossipService {
             log.debug("[GossipService] Finger table is empty, skip periodic gossip.");
             return;
         }
+        
+        String currentFingerTableState = fingerTable.finger.toString();
+        long currentTime = System.currentTimeMillis();
+        
+        // Check if finger table has changed since last broadcast or if it's been more than 60 seconds
+        // This prevents unnecessary broadcast storms while ensuring periodic health checks
+        boolean shouldBroadcast = !currentFingerTableState.equals(lastBroadcastedFingerTable) || 
+                                 (currentTime - lastBroadcastTime) > 60000; // Force broadcast every 60 seconds
+        
+        if (!shouldBroadcast) {
+            log.debug("[GossipService] Finger table unchanged since last broadcast, skipping to reduce gossip storm");
+            return;
+        }
+        
+        lastBroadcastedFingerTable = currentFingerTableState;
+        lastBroadcastTime = currentTime;
+        
         GossipMsg membershipMsg = GossipMsg.builder()
                 .msgType(GossipMsg.Type.HOST_ADD)
-                .msgContent(fingerTable.finger.toString())
+                .msgContent(currentFingerTableState)
                 .senderId(CURRENT_NODE_URL)
-                .timestamp(String.valueOf(System.currentTimeMillis()))
+                .timestamp(String.valueOf(currentTime))
                 .build();
         log.info("[GossipService] Periodically broadcasting membership info: {}", fingerTable.finger);
         randomSendGossip(membershipMsg, new ArrayList<>(fingerTable.finger.values()));
