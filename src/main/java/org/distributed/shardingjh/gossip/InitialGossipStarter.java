@@ -1,6 +1,8 @@
 package org.distributed.shardingjh.gossip;
 
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
 import java.util.Map;
 
 import org.distributed.shardingjh.p2p.FingerTable;
@@ -41,6 +43,9 @@ public class InitialGossipStarter implements ApplicationRunner {
      * */
     @Override
     public void run(ApplicationArguments args) throws Exception {
+        // 首先清理自己的重复映射，防止传播错误状态
+        cleanupOwnDuplicateMappings();
+        
         boolean isCurrentNodeInFingerTable = false;
         Integer currentNodeHash = null;
         
@@ -129,5 +134,38 @@ public class InitialGossipStarter implements ApplicationRunner {
             }
         }
         return null;
+    }
+
+    /**
+     * Clean up duplicate mappings for current node at startup
+     * If current node appears multiple times with different hashes, keep only the first occurrence
+     */
+    private void cleanupOwnDuplicateMappings() {
+        List<Integer> ownHashes = new ArrayList<>();
+        for (Map.Entry<Integer, String> entry : fingerTable.finger.entrySet()) {
+            if (entry.getValue().equals(CURRENT_NODE_URL)) {
+                ownHashes.add(entry.getKey());
+            }
+        }
+        
+        if (ownHashes.size() > 1) {
+            log.warn("[InitialGossipStarter] Found {} duplicate mappings for current node {}, keeping only the first one", 
+                    ownHashes.size(), CURRENT_NODE_URL);
+            Collections.sort(ownHashes); // 排序确保一致性
+            
+            // 保留第一个（最小的hash值），删除其他
+            for (int i = 1; i < ownHashes.size(); i++) {
+                Integer duplicateHash = ownHashes.get(i);
+                String removedUrl = fingerTable.finger.remove(duplicateHash);
+                log.info("[InitialGossipStarter] Removed duplicate mapping: {}={}", duplicateHash, removedUrl);
+            }
+            
+            log.info("[InitialGossipStarter] Cleanup completed. Kept hash: {}, removed {} duplicates", 
+                    ownHashes.get(0), ownHashes.size() - 1);
+        } else if (ownHashes.size() == 1) {
+            log.debug("[InitialGossipStarter] Current node has single hash mapping: {}, no cleanup needed", ownHashes.get(0));
+        } else {
+            log.debug("[InitialGossipStarter] Current node has no existing hash mappings");
+        }
     }
 }

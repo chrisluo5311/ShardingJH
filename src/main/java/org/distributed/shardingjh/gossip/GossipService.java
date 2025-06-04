@@ -146,10 +146,10 @@ public class GossipService {
                     String removedUrl = fingerTable.finger.remove(hash);
                     if (removedUrl != null) {
                         log.info("[GossipService] Removed host from finger table: {}={}", hash, removedUrl);
-                        // Propagate with original sender info to maintain proper duplicate detection
+                        // 修复：传播具体被移除的hash，而不是整个finger table
                         gossipMsg = GossipMsg.builder()
                                             .msgType(GossipMsg.Type.HOST_DOWN)
-                                            .msgContent(fingerTable.finger.toString())
+                                            .msgContent(String.valueOf(hash))  // 传播被移除的hash
                                             .senderId(message.getSenderId())  // Keep original sender
                                             .timestamp(message.getTimestamp())  // Keep original timestamp
                                             .build();
@@ -389,6 +389,71 @@ public class GossipService {
                 .build();
         log.info("[GossipService] Periodically broadcasting membership info: {}", fingerTable.finger);
         randomSendGossip(membershipMsg, new ArrayList<>(fingerTable.finger.values()));
+    }
+
+    /**
+     * Periodically clean up duplicate node entries
+     * Runs every 5 minutes to detect and clean up nodes with multiple hash assignments
+     */
+    @Scheduled(fixedRate = 300000) // 5 minutes
+    public void periodicCleanupDuplicateNodes() {
+        try {
+            Map<String, List<Integer>> addressToHashes = new HashMap<>();
+            
+            // Group hashes by address
+            for (Map.Entry<Integer, String> entry : fingerTable.finger.entrySet()) {
+                String address = entry.getValue();
+                Integer hash = entry.getKey();
+                
+                addressToHashes.computeIfAbsent(address, k -> new ArrayList<>()).add(hash);
+            }
+            
+            // Find and clean up duplicates
+            boolean foundDuplicates = false;
+            for (Map.Entry<String, List<Integer>> entry : addressToHashes.entrySet()) {
+                String address = entry.getKey();
+                List<Integer> hashes = entry.getValue();
+                
+                if (hashes.size() > 1) {
+                    foundDuplicates = true;
+                    log.warn("[GossipService] ⚠️ DUPLICATE NODE DETECTED: {} has {} hash assignments: {}", 
+                            address, hashes.size(), hashes);
+                    
+                    // Sort hashes to ensure consistent cleanup across nodes
+                    hashes.sort(Integer::compareTo);
+                    
+                    // Keep the first (smallest) hash, remove others
+                    Integer keepHash = hashes.get(0);
+                    for (int i = 1; i < hashes.size(); i++) {
+                        Integer duplicateHash = hashes.get(i);
+                        String removedUrl = fingerTable.finger.remove(duplicateHash);
+                        log.info("[GossipService] 🧹 Cleaned up duplicate entry: {}={}", duplicateHash, removedUrl);
+                        
+                        // Send HOST_DOWN gossip for the removed hash
+                        GossipMsg cleanupMsg = GossipMsg.builder()
+                                .msgType(GossipMsg.Type.HOST_DOWN)
+                                .msgContent(String.valueOf(duplicateHash))
+                                .senderId(CURRENT_NODE_URL)
+                                .timestamp(String.valueOf(System.currentTimeMillis()))
+                                .build();
+                        
+                        randomSendGossip(cleanupMsg, new ArrayList<>(fingerTable.finger.values()));
+                    }
+                    
+                    log.info("[GossipService] ✅ Kept hash {} for node {}, removed {} duplicates", 
+                            keepHash, address, hashes.size() - 1);
+                }
+            }
+            
+            if (foundDuplicates) {
+                log.info("[GossipService] 🎯 Duplicate cleanup completed. Current finger table: {}", fingerTable.finger);
+            } else {
+                log.debug("[GossipService] ✅ No duplicate nodes found during periodic cleanup");
+            }
+            
+        } catch (Exception e) {
+            log.error("[GossipService] Error during periodic duplicate cleanup: {}", e.getMessage(), e);
+        }
     }
 
     // Send HOSTUP gossip message

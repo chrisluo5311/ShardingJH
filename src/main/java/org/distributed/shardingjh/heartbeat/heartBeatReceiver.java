@@ -5,6 +5,7 @@ import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -174,42 +175,51 @@ public class heartBeatReceiver {
         // Mark node as failed in BootstrapService
         bootstrapService.markNodeAsFailed(nodeUrl);
         
-        // Find the hash key for the failed node
-        Integer failedNodeHash = findHashByNodeUrl(nodeUrl);
-        if (failedNodeHash != null) {
-            // Remove from local finger table
-            fingerTable.finger.remove(failedNodeHash);
-            log.info("[HeartBeat] Removed failed node from finger table: {} -> {}", failedNodeHash, nodeUrl);
-            
-            // Send HOST_DOWN gossip message
-            sendHostDownGossip(failedNodeHash);
-            
-            log.info("[HeartBeat] Node failure confirmation completed for: {}", nodeUrl);
+        // Find ALL hash keys for the failed node
+        List<Integer> failedNodeHashes = findAllHashesByNodeUrl(nodeUrl);
+        if (!failedNodeHashes.isEmpty()) {
+            // Remove from local finger table and send HOST_DOWN for each hash
+            for (Integer failedNodeHash : failedNodeHashes) {
+                fingerTable.finger.remove(failedNodeHash);
+                log.info("[HeartBeat] Removed failed node from finger table: {} -> {}", failedNodeHash, nodeUrl);
+                
+                // Send HOST_DOWN gossip message for each hash
+                sendHostDownGossip(failedNodeHash);
+            }
+                
+            log.info("[HeartBeat] Node failure confirmation completed for: {} (removed {} hash mappings)", nodeUrl, failedNodeHashes.size());
         } else {
-            log.warn("[HeartBeat] Could not find hash for failed node: {}", nodeUrl);
+            log.warn("[HeartBeat] Could not find any hash for failed node: {}", nodeUrl);
         }
     }
 
     /**
-     * Find hash key by node URL in finger table
+     * Find ALL hash keys for a node URL in finger table (improved version)
      * @param nodeUrl Node URL to find
-     * @return Hash key or null if not found
+     * @return List of all hash keys for this node
      */
-    private Integer findHashByNodeUrl(String nodeUrl) {
-        log.debug("[HeartBeat] Looking for hash of failed node: '{}' in finger table", nodeUrl);
+    private List<Integer> findAllHashesByNodeUrl(String nodeUrl) {
+        List<Integer> hashes = new ArrayList<>();
+        log.debug("[HeartBeat] Looking for ALL hashes of failed node: '{}' in finger table", nodeUrl);
         log.debug("[HeartBeat] Current finger table entries: {}", fingerTable.finger);
         
         for (Map.Entry<Integer, String> entry : fingerTable.finger.entrySet()) {
             log.debug("[HeartBeat] Comparing '{}' with finger table entry: '{}' -> '{}'", 
                     nodeUrl, entry.getKey(), entry.getValue());
             if (entry.getValue().equals(nodeUrl)) {
+                hashes.add(entry.getKey());
                 log.info("[HeartBeat] Found matching hash: {} for node: {}", entry.getKey(), nodeUrl);
-                return entry.getKey();
             }
         }
-        log.warn("[HeartBeat] No matching hash found for node: '{}' in finger table with {} entries", 
-                nodeUrl, fingerTable.finger.size());
-        return null;
+        
+        if (hashes.isEmpty()) {
+            log.warn("[HeartBeat] No matching hashes found for node: '{}' in finger table with {} entries", 
+                    nodeUrl, fingerTable.finger.size());
+        } else {
+            log.info("[HeartBeat] Found {} hash(es) for node {}: {}", hashes.size(), nodeUrl, hashes);
+        }
+        
+        return hashes;
     }
 
     /**
@@ -361,3 +371,4 @@ public class heartBeatReceiver {
         }
     }
 }
+
