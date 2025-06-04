@@ -63,6 +63,33 @@ public class OrderControllerSecurityTest {
     }
 
     @Test
+    public void testSaveOrder_withInvalidSignature_shouldReturnUnauthorized() throws Exception {
+        String bodyJson = SignatureUtil.toCanonicalJson(initialOrder, objectMapper);
+        // Use an invalid signature
+        String invalidSignature = "invalid-signature";
+
+        mockMvc.perform(MockMvcRequestBuilders.post("/order/save")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(bodyJson)
+                        .header("X-Signature", invalidSignature))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("007"))
+                .andExpect(jsonPath("$.message").value("Unauthorized request"));
+    }
+
+    @Test
+    public void testSaveOrder_withNoSignature_shouldReturnUnauthorized() throws Exception {
+        String bodyJson = SignatureUtil.toCanonicalJson(initialOrder, objectMapper);
+        // Use an invalid signature
+
+        mockMvc.perform(MockMvcRequestBuilders.post("/order/save")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(bodyJson))
+                        .andExpect(status().is4xxClientError());
+        // show 400 error, Error message = Required header 'X-Signature' is not present.
+    }
+
+    @Test
     public void testDelete_withValidSignature_shouldReturnSuccess() throws Exception {
         String bodyJson = SignatureUtil.toCanonicalJson(initialOrder, objectMapper);
         String saveSignature = EncryptUtil.hmacSha256(bodyJson, SECRET_KEY);
