@@ -22,12 +22,13 @@ import java.time.LocalDateTime;
 import static org.assertj.core.api.AssertionsForClassTypes.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @Slf4j
 @SpringBootTest
 @AutoConfigureMockMvc
-public class OrderRollBack {
+public class OrderRollBackTest {
 
     @Autowired
     private MockMvc mockMvc;
@@ -79,11 +80,11 @@ public class OrderRollBack {
         try  {
             String updateJson = SignatureUtil.toCanonicalJson(update, objectMapper);
             String updateSignature = EncryptUtil.hmacSha256(updateJson, SECRET_KEY);
-            mockMvc.perform(post("/order/updateAndFail")
+            mockMvc.perform(post("/order/update")
                             .contentType(MediaType.APPLICATION_JSON)
                             .header("X-Signature", updateSignature)
                             .content(updateJson))
-                    .andExpect(status().isInternalServerError()); // 500 due to forced exception
+                    .andExpect(jsonPath("$.code").value("0402")); // 0402
         } catch (Exception e) {
             log.error("❌ Caught expected exception: {}", String.valueOf(e.getCause()));
         }

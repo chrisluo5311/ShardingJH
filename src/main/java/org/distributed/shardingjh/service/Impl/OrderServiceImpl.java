@@ -3,6 +3,7 @@ package org.distributed.shardingjh.service.Impl;
 import jakarta.annotation.Resource;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
+import jakarta.persistence.RollbackException;
 import lombok.extern.slf4j.Slf4j;
 import org.distributed.shardingjh.context.ShardContext;
 import org.distributed.shardingjh.model.OrderKey;
@@ -150,17 +151,9 @@ public class OrderServiceImpl implements OrderService {
             String shardKey = rangeStrategy.resolveShard(toUpdateOrder.getCreateTime());
             log.info("Routing order {} to shard {}", orderId, shardKey);
             ShardContext.setCurrentShard(shardKey);
-            // Creates a new transaction definition object,
-            // allowing you to customize transaction properties (like propagation, isolation, etc.)
-            DefaultTransactionDefinition def = new DefaultTransactionDefinition();
-            // Sets a name for the transaction
-            def.setName("ManualRollbackTX");
-            // PROPAGATION_REQUIRED: if a transaction already exists, the method will join it;
-            // if not, a new transaction will be started.
-            def.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRED);
-            TransactionStatus status = txManager.getTransaction(def);
+            EntityManager newEm = em.getEntityManagerFactory().createEntityManager();
             try {
-                em.joinTransaction();
+                newEm.getTransaction().begin();
 
                 // MVCC check - Fetch current version
                 OrderTable current = orderRepository.findCurrentByOrderId(orderId)
@@ -176,7 +169,7 @@ public class OrderServiceImpl implements OrderService {
 
                 // Expire current
                 current.setExpiredAt(LocalDateTime.now());
-                em.merge(current);
+                newEm.merge(current);
 
                 // Insert new version
                 int nextVersion = actualVersion + 1;
@@ -185,34 +178,29 @@ public class OrderServiceImpl implements OrderService {
                 copiedOrder.setId(new OrderKey(orderId, nextVersion));
                 copiedOrder.setExpiredAt(null);
                 copiedOrder.setIsDeleted(0);
-                em.persist(copiedOrder);
+                newEm.persist(copiedOrder);
                 log.info("Older version expired, new version set to {}", nextVersion);
 
-                // [Comment out if not test] Test MVCC
-                // only the first thread that reaches this line triggers the failure,
-                // allowing the second thread to retry and hit a version mismatch
-//                if (attempt == 1 && firstFailureSimulated.compareAndSet(false, true)) {
-//                    throw new RuntimeException("Simulated failure ");
-//                }
-
-                // // [Comment out if not test] Test rollback
+                 // TODO [Comment out if not test] Test rollback
 //                if (attempt == 1) {
-//                    throw new RuntimeException("Simulated failure ");
+//                    throw new RuntimeException("Simulated failure");
 //                }
 
-                txManager.commit(status); // Success
+                newEm.getTransaction().commit();
                 log.info("Transaction committed on attempt {}", attempt);
                 return toUpdateOrder;
-            } catch (CannotAcquireLockException | JpaSystemException e) {
-                log.warn("DB locked. Attempt {}/{} failed. Retrying...", attempt, maxRetries);
+            } catch (CannotAcquireLockException | RollbackException e) {
+                log.error("DB locked. Attempt {}/{} failed. Retrying...", attempt, maxRetries);
                 sleep(attempt * 100L);
-                txManager.rollback(status);
+                newEm.getTransaction().rollback();
             } catch (Exception e) {
                 log.error("Rolling back transaction due to: {}", e.getMessage());
-                txManager.rollback(status);
-                throw e; // Re-throw for controller to catch
+                newEm.getTransaction().rollback();
+                if (e.getMessage().equals("Simulated failure")) {
+                    throw new RuntimeException("Simulated failure");
+                }
             } finally {
-                em.close();
+                newEm.close();
                 ShardContext.clear();
             }
         }
