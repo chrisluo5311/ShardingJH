@@ -60,11 +60,7 @@ public class OrderControllerMVCCConcurrencyTest {
         initialOrder.setPrice(500);
         initialOrder.generateOrderId();
     }
-
-    /**
-     * #TODO: open firstFailureSimulated.compareAndExchange check
-     * If don't open check, real world situation would both rollback
-     * */
+    
     @Test
     public void testMVCCConflictOnConcurrentUpdate() throws Exception {
         String bodyJson = SignatureUtil.toCanonicalJson(initialOrder, objectMapper);
