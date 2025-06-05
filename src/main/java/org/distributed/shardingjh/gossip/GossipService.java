@@ -106,6 +106,12 @@ public class GossipService {
      *
      * */
     public void msgHandle(GossipMsg message) {
+        // 检查是否是自己发送的消息，如果是则直接丢弃
+        if (message.getSenderId().equals(CURRENT_NODE_URL)) {
+            log.debug("[GossipService] Discarding message from self to prevent loops: {}", message.getMsgType());
+            return;
+        }
+        
         // Use senderId + timestamp for duplicate detection instead of message content
         // This allows same content messages from different senders or different times to be processed
         String msgKey = message.getSenderId() + "_" + message.getTimestamp() + "_" + message.getMsgType();
