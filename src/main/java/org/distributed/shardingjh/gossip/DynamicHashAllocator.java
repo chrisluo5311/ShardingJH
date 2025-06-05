@@ -78,6 +78,13 @@ public class DynamicHashAllocator {
     public Integer allocateHashForCurrentNode() throws InterruptedException {
         log.info("[DynamicHashAllocator] Starting dynamic hash allocation for node {}", CURRENT_NODE_URL);
         
+        // 首先检查当前节点是否已经有hash分配，防止重复分配
+        Integer existingHash = findCurrentNodeHash();
+        if (existingHash != null) {
+            log.info("[DynamicHashAllocator] Node already has hash assignment: {}, skipping allocation to prevent duplicates", existingHash);
+            return existingHash;
+        }
+        
         // Phase 1: Discover current network state
         Map<Integer, String> networkFingerTable = discoverNetworkState();
         
@@ -86,6 +93,20 @@ public class DynamicHashAllocator {
         
         // Phase 3: Two-phase commit to apply hash
         return requestHashAllocation(proposedHash);
+    }
+    
+    /**
+     * Find existing hash assignment for current node
+     * @return Hash value if found, null otherwise
+     */
+    private Integer findCurrentNodeHash() {
+        for (Map.Entry<Integer, String> entry : fingerTable.finger.entrySet()) {
+            if (entry.getValue().equals(CURRENT_NODE_URL)) {
+                log.debug("[DynamicHashAllocator] Found existing hash assignment: {} -> {}", entry.getKey(), entry.getValue());
+                return entry.getKey();
+            }
+        }
+        return null;
     }
     
     /**

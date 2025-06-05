@@ -3,6 +3,7 @@ package org.distributed.shardingjh.heartbeat;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 
@@ -163,34 +164,37 @@ public class hearBeatSender {
         // Mark node as failed in BootstrapService
         bootstrapService.markNodeAsFailed(failedNodeUrl);
         
-        // Find the hash key for the failed node
-        Integer failedNodeHash = findHashByNodeUrl(failedNodeUrl);
-        if (failedNodeHash != null) {
-            // Remove from local finger table
-            fingerTable.finger.remove(failedNodeHash);
-            log.info("[HeartBeat] Removed failed node from finger table: {} -> {}", failedNodeHash, failedNodeUrl);
+        // Find ALL hash keys for the failed node
+        List<Integer> failedNodeHashes = findAllHashesByNodeUrl(failedNodeUrl);
+        if (!failedNodeHashes.isEmpty()) {
+            // Remove from local finger table and send HOST_DOWN for each hash
+            for (Integer failedNodeHash : failedNodeHashes) {
+                fingerTable.finger.remove(failedNodeHash);
+                log.info("[HeartBeat] Removed failed node from finger table: {} -> {}", failedNodeHash, failedNodeUrl);
+                
+                // Send HOST_DOWN gossip message for each hash
+                sendHostDownGossip(failedNodeHash);
+            }
             
-            // Send HOST_DOWN gossip message
-            sendHostDownGossip(failedNodeHash);
-            
-            log.info("[HeartBeat] Node failure handling completed for: {}", failedNodeUrl);
+            log.info("[HeartBeat] Node failure handling completed for: {} (removed {} hash mappings)", failedNodeUrl, failedNodeHashes.size());
         } else {
-            log.warn("[HeartBeat] Could not find hash for failed node: {}", failedNodeUrl);
+            log.warn("[HeartBeat] Could not find any hash for failed node: {}", failedNodeUrl);
         }
     }
 
     /**
-     * Find hash key by node URL in finger table
+     * Find ALL hash keys for a node URL in finger table
      * @param nodeUrl Node URL to find
-     * @return Hash key or null if not found
+     * @return List of all hash keys for this node
      */
-    private Integer findHashByNodeUrl(String nodeUrl) {
+    private List<Integer> findAllHashesByNodeUrl(String nodeUrl) {
+        List<Integer> hashes = new ArrayList<>();
         for (Map.Entry<Integer, String> entry : fingerTable.finger.entrySet()) {
             if (entry.getValue().equals(nodeUrl)) {
-                return entry.getKey();
+                hashes.add(entry.getKey());
             }
         }
-        return null;
+        return hashes;
     }
 
     /**
