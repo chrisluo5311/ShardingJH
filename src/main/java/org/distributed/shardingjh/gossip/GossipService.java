@@ -106,7 +106,7 @@ public class GossipService {
      *
      * */
     public void msgHandle(GossipMsg message) {
-        // 检查是否是自己发送的消息，如果是则直接丢弃
+        // If the message is from self, discard it to prevent loops
         if (message.getSenderId().equals(CURRENT_NODE_URL)) {
             log.debug("[GossipService] Discarding message from self to prevent loops: {}", message.getMsgType());
             return;
@@ -272,12 +272,10 @@ public class GossipService {
 
         // Filter out current node from neighbors first
         List<String> validNeighbors = new ArrayList<>();
-        String currentIp = getCurrentIp();
         
         for (String neighborUrl : neighbors) {
-            String[] partsNeighbor = neighborUrl.split(":");
-            String neighborIp = partsNeighbor[1].replace("//", "");
-            if (!neighborIp.equals(currentIp)) {
+            // 使用完整的URL进行比较，而不是只比较IP
+            if (!neighborUrl.equals(CURRENT_NODE_URL)) {
                 validNeighbors.add(neighborUrl);
             }
         }
@@ -318,12 +316,10 @@ public class GossipService {
 
         // Filter out current node from neighbors first
         List<String> validNeighbors = new ArrayList<>();
-        String currentIp = getCurrentIp();
         
         for (String neighborUrl : neighbors) {
-            String[] partsNeighbor = neighborUrl.split(":");
-            String neighborIp = partsNeighbor[1].replace("//", "");
-            if (!neighborIp.equals(currentIp)) {
+            // 使用完整的URL进行比较，而不是只比较IP
+            if (!neighborUrl.equals(CURRENT_NODE_URL)) {
                 validNeighbors.add(neighborUrl);
             }
         }
