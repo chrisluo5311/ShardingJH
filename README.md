@@ -2,21 +2,23 @@
 
 ShardingJH is a distributed database project that relies on Spring Boot, Hibernate and SQLite. It features P2P routing, gossip-based node discovery and sharding between multiple SQLite instances.
 
+See the demo at [ShardingJH Demo](http://18.223.108.116/).
+
 ## Requirements
 
-- Java 17 or later
-- SQLite installed locally
-- (Optional) Maven if you prefer not to use the provided wrapper
+- Java 8+
+- SQLite 
+- Maven
+- RabbitMQ
 
 ## Build and Run
 
-1. Clone this repository.
-2. Ensure Java 17 and SQLite are available on your PATH.
-3. Build the project using the Maven wrapper:
+1. Ensure Java 8+ ,SQLite and RabbitMQ are available on your PATH.
+2. Build the project using the Maven wrapper:
    ```bash
    ./mvnw clean package -DskipTests
    ```
-4. Choose a server profile (`server1`, `server2`, `server3` or `server4`) and run the application with the helper script:
+3. Choose a server profile (`server1`, `server2`, `server3` or `server4`) and run the application with the helper script:
    ```bash
    ./run-app.sh server1
    ```
@@ -35,6 +37,8 @@ The project contains a GitHub Actions workflow (`.github/workflows/github-action
 
 ## Division of Work
 
-- **JiDung** – Encryption, P2P routing, Sharding strategy, MVCC and roll back, Static file replication, RabbitMQ product update sync, Frontend, AWS Deployment, Spring Boot framework, SQLite establishment
-- **Haopeng** – Gossip, HeartBeat messaging, Dynamic hash allocating
+| Name      | Responsibilities                                                                                                 |
+|-----------|------------------------------------------------------------------------------------------------------------------|
+| JiDung    | Encryption, P2P routing, Sharding strategy, MVCC and roll back, Static file replication, RabbitMQ product update sync, Frontend, AWS Deployment, Spring Boot framework, SQLite establishment |
+| Haopeng   | Gossip, HeartBeat messaging, Dynamic hash allocating                                                             |
 
