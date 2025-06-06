@@ -42,3 +42,10 @@ The project contains a GitHub Actions workflow (`.github/workflows/github-action
 | JiDung    | Encryption, P2P routing, Sharding strategy, MVCC and roll back, Static file replication, RabbitMQ product update sync, Frontend, AWS Deployment, Spring Boot framework, SQLite establishment |
 | Haopeng   | Gossip, HeartBeat messaging, Dynamic hash allocating                                                             |
 
+## Demo video
+[![ShardingJH Demo](https://img.youtube.com/vi/kl9JrnHCmfs/0.jpg)](https://youtu.be/kl9JrnHCmfs)
+
+## Report and Presentation
+
+- [Report](https://github.com/chrisluo5311/ShardingJH/blob/master/Distributed%20Database%20Final%20Project.pdf)
+- [Presentation](https://github.com/chrisluo5311/ShardingJH/blob/master/CSEN%20317%20Final%20Presentation.pdf)
